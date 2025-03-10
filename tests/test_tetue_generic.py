@@ -5,7 +5,9 @@ generic utilities and functions within package tetue_generic.
 import sys
 import pytest
 from asyncmock import AsyncMock
+from pydantic import ValidationError
 import src
+from src.tetue_generic import GENERIC_REQUEST_TIMEOUT_THR
 
 sys.path.append('..')
 
@@ -157,29 +159,32 @@ def test_gen_req_configuration_default():
     config = src.GenReqConfiguration()
     assert config.request_timeout == 10
 
-def test_init_generic_requests_changes_timeout():
+def test_gen_req_configuration_valid():
     """
-    Validates whether `init_generic_requests` correctly updates the timeout value.
+    Verifies the correct value for request timeout of `GenReqConfiguration`.
+    
+    Steps:
+    1. Instantiate `GenReqConfiguration` with a custom request timeout with 33s.
+    2. Assert that `request_timeout` equals the custom value 33s.
+    """
+    config = src.GenReqConfiguration(request_timeout=33)
+    assert config.request_timeout == 33
+
+def test_gen_req_configuration_invalid():
+    """
+    Verifies the validation of request timeout of `GenReqConfiguration`.
 
     Steps:
-    1. Set a new timeout value.
-    2. Call `init_generic_requests` with the new value.
-    3. Assert that the `request_timeout` in `gen_req_settings` is updated.
+    1. Instantiate `GenReqConfiguration` with an invalid request timeout below the threshold.
+    2. Assert that a `ValidationError` is raised with the correct error message.
     """
-    new_timeout = 20
-    src.init_generic_requests(new_timeout)
-    assert src.gen_req_settings.request_timeout == new_timeout
+    with pytest.raises(ValidationError) as exc_info:
+        src.GenReqConfiguration(request_timeout=GENERIC_REQUEST_TIMEOUT_THR-1)
+    errors = exc_info.value.errors()
+    assert len(errors) == 1
+    assert errors[0]['msg'] == \
+    f"Value error, request_timeout must be greater than or equal to {GENERIC_REQUEST_TIMEOUT_THR}"
 
-def test_init_generic_requests_invalid_value():
-    """
-    Ensures `init_generic_requests` raises an error for invalid input.
-
-    Steps:
-    1. Pass an invalid timeout value.
-    2. Assert that a `ValueError` is raised.
-    """
-    with pytest.raises(ValueError):
-        src.init_generic_requests(-1)
 
 def test_watcher_configuration_default():
     """
@@ -201,6 +206,5 @@ def test_init_generic_watcher_changes_file_path():
     2. Call `init_generic_watcher` with the new value.
     3. Assert that the `log_file_path` in `watcher_settings` is updated.
     """
-    new_file_path = "test/app2.log"
-    src.init_generic_watcher(new_file_path)
-    assert src.watcher_settings.log_file_path == "test/app2.log"
+    config = src.WatcherConfiguration(log_file_path="tests/app2.log")
+    assert config.log_file_path == "tests/app2.log"

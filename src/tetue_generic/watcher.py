@@ -13,7 +13,7 @@ class WatcherConfiguration(BaseModel):
     """
 
     log_level: str = ""
-    log_file_path: FilePath = "files/app.log"
+    log_file_path: str = "files/app.log"
 
 
 watcher_settings = WatcherConfiguration()

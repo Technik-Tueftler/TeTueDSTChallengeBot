@@ -8,6 +8,7 @@ and enables
 """
 from .configuration import *
 from .db import *
+from .discord_bot import *
 from .tetue_generic.generic_requests import *
 from .tetue_generic.watcher import *
 

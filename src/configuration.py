@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .db import DbConfiguration
+from .discord_bot import DiscordBotConfiguration
 from .tetue_generic.generic_requests import GenReqConfiguration
 from .tetue_generic.watcher import WatcherConfiguration
 
@@ -28,3 +29,4 @@ class Configuration(BaseSettings):
     gen_req: GenReqConfiguration
     watcher: WatcherConfiguration
     db: DbConfiguration
+    dc: DiscordBotConfiguration

@@ -5,8 +5,8 @@ sys.path.insert(0, os.path.abspath("../"))
 
 from src import __version__, __repository__
 
-project = 'TeTueGeneric'
-copyright = '2024, Technik Tueftler'
+project = 'DST Game Bot'
+copyright = '2025, Technik Tueftler'
 author = 'Technik Tueftler'
 release = __version__
 

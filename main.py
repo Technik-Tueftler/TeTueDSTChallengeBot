@@ -7,8 +7,11 @@ import src
 
 
 async def background_task():
+    """
+    Background test task that runs in parallel to the main task.
+    """
     while True:
-        print("Hintergrundtask läuft...")
+        print("Test task runs...")
         await asyncio.sleep(10)
 
 async def main():
@@ -19,11 +22,10 @@ async def main():
     src.watcher.init_logging(config.watcher.log_level)
     config.db.initialize_db()
     src.watcher.logger.info(f"Start application in version: {src.__version__}")
-    await asyncio.gather(
-        src.sync_db(config.db.engine),
-        src.discord_bot.bot.start(config.dc.token),
-        background_task()
-    )
+
+    tasks = [src.sync_db(config.db.engine), src.discord_bot.bot.start(config.dc.token)]
+    tasks.append(background_task())
+    await asyncio.gather(*tasks)
 
     # async with config.db.session() as session:
     #     user = src.Items(

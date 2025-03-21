@@ -63,7 +63,7 @@ class PlayerLevelInput(
         for player in self.player_list:
             player.hours = mapping[player.name]
         # await interaction.response.send_message(f"Player 1: {self.hours_1.value}")
-        await interaction.response.send_message("Fertig")
+        await interaction.response.send_message("Fertig", ephemeral=True)
         self.stop()
 
 
@@ -72,9 +72,9 @@ class UserSelectView(discord.ui.View):
     UserSelectView class to create a view for the user selection menu with handler.
     """
 
-    def __init__(self, player_list: List):
+    def __init__(self):
         super().__init__()
-        self.player_list = player_list
+        self.player_list = []
 
     @discord.ui.select(
         cls=discord.ui.UserSelect,
@@ -86,9 +86,17 @@ class UserSelectView(discord.ui.View):
         self, interaction: Interaction, select: discord.ui.UserSelect
     ):
         #print(select.values)
-        #selected = [user.mention for user in select.values]
-        self.player_list = [Player(user.name, user.id, 0) for user in select.values]
-        await interaction.response.send_modal(PlayerLevelInput(self.player_list))
+        #selected = [user.mention for user in select.values
+        try:
+            self.player_list = [Player(user.name, user.id, 0) for user in select.values]
+            player_input = PlayerLevelInput(self.player_list)
+            await interaction.response.send_modal(player_input)
+            await player_input.wait()
+        except Exception as e:
+            print(e)
+        print(f"{"#"*10} in UserSelect")
+        for player in self.player_list:
+            print(player)
         # await interaction.response.send_message(f"The players for game \"Fast and hungry, task hunt\" are: : {', '.join(selected)}")
         self.stop()
 
@@ -118,26 +126,26 @@ async def game1(interaction: discord.Interaction):
     player has completed all tasks.
     """
     if interaction.guild:
-        player_list = []
         try:
-            user_view = UserSelectView(player_list)
+            user_view = UserSelectView()
             await interaction.response.send_message(
                 'Select the players for the game "Fast and hungry, task hunt":',
                 view=user_view,
                 ephemeral=True,
             )
             await user_view.wait()
-            print("beendet")
-            for player in player_list:
-                print(player)
-            print(user_view.player_list)
             # print(user_view.children[0].values)
-            selected = [user.mention for user in user_view.children[0].values]
+            # selected = [user.mention for user in user_view.children[0].values]
+            print(f"{"#"*10} Create new Game and enter to DB with user_view.player_list")
+            output_message = "The players for game \"Fast and hungry, task hunt\" are:\n"
+            for player in user_view.player_list:
+                output_message = output_message + f"<@{player.dc_id}> with {player.hours} playing hours\n"
+            await interaction.followup.send(output_message)
         except Exception as e:
             print(e)
 
         # try:
-        # await interaction.response.send_message(f"The players for game \"Fast and hungry, task hunt\" are: : {', '.join(selected)}")
+        # 
         # except Exception as e:
         # print(e)
         # print((f"The players for game \"Fast and hungry, task hunt\" are: : {', '.join(selected)}"))

@@ -20,9 +20,10 @@ class Player:
         self.dc_id = dc_number
         self.hours = hours
 
-
     def __str__(self):
-        return f"Player {self.name} with id: {self.dc_id} has played {self.hours} hours."
+        return (
+            f"Player {self.name} with id: {self.dc_id} has played {self.hours} hours."
+        )
 
 
 class DiscordBotConfiguration(BaseModel):
@@ -63,7 +64,11 @@ class PlayerLevelInput(
         for player in self.player_list:
             player.hours = mapping[player.name]
         # await interaction.response.send_message(f"Player 1: {self.hours_1.value}")
-        await interaction.response.send_message("Fertig", ephemeral=True)
+        await interaction.response.send_message(
+            "The game was created plan the next steps and start the \
+                game when you are ready via the emote.",
+            ephemeral=True,
+        )
         self.stop()
 
 
@@ -85,8 +90,8 @@ class UserSelectView(discord.ui.View):
     async def user_select(
         self, interaction: Interaction, select: discord.ui.UserSelect
     ):
-        #print(select.values)
-        #selected = [user.mention for user in select.values
+        # print(select.values)
+        # selected = [user.mention for user in select.values
         try:
             self.player_list = [Player(user.name, user.id, 0) for user in select.values]
             player_input = PlayerLevelInput(self.player_list)
@@ -136,16 +141,21 @@ async def game1(interaction: discord.Interaction):
             await user_view.wait()
             # print(user_view.children[0].values)
             # selected = [user.mention for user in user_view.children[0].values]
-            print(f"{"#"*10} Create new Game and enter to DB with user_view.player_list")
-            output_message = "The players for game \"Fast and hungry, task hunt\" are:\n"
+            print(
+                f"{"#"*10} Create new Game and enter to DB with user_view.player_list"
+            )
+            output_message = 'The players for game "Fast and hungry, task hunt" are:\n'
             for player in user_view.player_list:
-                output_message = output_message + f"<@{player.dc_id}> with {player.hours} playing hours\n"
+                output_message = (
+                    output_message
+                    + f"<@{player.dc_id}> with {player.hours} playing hours\n"
+                )
             await interaction.followup.send(output_message)
         except Exception as e:
             print(e)
 
         # try:
-        # 
+        #
         # except Exception as e:
         # print(e)
         # print((f"The players for game \"Fast and hungry, task hunt\" are: : {', '.join(selected)}"))

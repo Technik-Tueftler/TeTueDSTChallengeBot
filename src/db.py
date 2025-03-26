@@ -1,8 +1,10 @@
 """All database related functions are here."""
 
 import re
+from datetime import datetime
 from pydantic import BaseModel, field_validator
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncEngine
 
 DB_URL_PATTERN = r"^sqlite\+aiosqlite:///{1,3}(\.\./)*[^/]+/[^/]+\.db$"
@@ -13,6 +15,50 @@ class Base(DeclarativeBase):
     Args:
         DeclarativeBase (_type_): Basic class that is inherited
     """
+
+
+class GamePlayerAssociation(Base):
+    """
+    _summary_
+
+    Args:
+        Base (_type_): _description_
+    """
+    __tablename__ = "game_player_association"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id"))
+    player_id: Mapped[int] = mapped_column(ForeignKey("players.id"))
+    game = relationship("Game", back_populates="players")
+    player = relationship("Player", back_populates="games")
+
+
+class Player(Base):
+    """
+    _summary_
+
+    Args:
+        Base (_type_): _description_
+    """
+    __tablename__ = "players"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(nullable=False)
+    hours: Mapped[int] = mapped_column()
+    games = relationship("GamePlayerAssociation", back_populates="player")
+
+
+class Game(Base):
+    """Game table
+
+    Args:
+        Base (_type_): Basic class that is inherited
+    """
+
+    __tablename__ = "games"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column()
+    timestamp: Mapped[datetime] = mapped_column(nullable=False)
+    players = relationship("GamePlayerAssociation", back_populates="game")
 
 
 class Items(Base):

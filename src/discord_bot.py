@@ -10,7 +10,7 @@ from discord import Interaction
 from typing import List
 
 
-class Player:
+class Playerx:
     """
     Player class to store the player name and the playing hours.
     """
@@ -46,9 +46,10 @@ class PlayerLevelInput(
     PlayerLevelInput class to create a input menu with for the player levels.
     """
 
-    def __init__(self, player_list: List[Player]):
+    def __init__(self, player_list: List[Playerx]):
         super().__init__()
         self.player_list = player_list
+        self.input_valid = True
         for player in player_list:
             self.add_item(
                 discord.ui.TextInput(
@@ -63,10 +64,18 @@ class PlayerLevelInput(
         mapping = {child.label: child.value for child in self.children}
         for player in self.player_list:
             player.hours = mapping[player.name]
-        # await interaction.response.send_message(f"Player 1: {self.hours_1.value}")
+            if not player.hours.isdigit():
+                self.input_valid = False
+                break
+        if not self.input_valid:
+            await interaction.response.send_message(
+                "Please enter only numbers for the playing hours.",
+                ephemeral=True,
+            )
+            return
         await interaction.response.send_message(
-            "The game was created plan the next steps and start the \
-                game when you are ready via the emote.",
+            "The game was created plan the next steps and start the " +
+            "game when you are ready via the emote.",
             ephemeral=True,
         )
         self.stop()
@@ -80,6 +89,7 @@ class UserSelectView(discord.ui.View):
     def __init__(self):
         super().__init__()
         self.player_list = []
+        self.valid_input = True
 
     @discord.ui.select(
         cls=discord.ui.UserSelect,
@@ -92,13 +102,11 @@ class UserSelectView(discord.ui.View):
     ):
         # print(select.values)
         # selected = [user.mention for user in select.values
-        try:
-            self.player_list = [Player(user.name, user.id, 0) for user in select.values]
-            player_input = PlayerLevelInput(self.player_list)
-            await interaction.response.send_modal(player_input)
-            await player_input.wait()
-        except Exception as e:
-            print(e)
+        self.player_list = [Playerx(user.name, user.id, 0) for user in select.values]
+        player_input = PlayerLevelInput(self.player_list)
+        await interaction.response.send_modal(player_input)
+        await player_input.wait()
+        self.valid_input = player_input.input_valid
         print(f"{"#"*10} in UserSelect")
         for player in self.player_list:
             print(player)
@@ -141,6 +149,8 @@ async def game1(interaction: discord.Interaction):
             await user_view.wait()
             # print(user_view.children[0].values)
             # selected = [user.mention for user in user_view.children[0].values]
+            if not user_view.valid_input:
+                return
             print(
                 f"{"#"*10} Create new Game and enter to DB with user_view.player_list"
             )

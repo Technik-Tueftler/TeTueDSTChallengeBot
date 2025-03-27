@@ -2,28 +2,12 @@
 This module contains the discord bot implementation with definitions for the bot and its commands.
 The bot is implemented using the discord.py library and provides a simple command to test the bot.
 """
-
+from typing import List
 from pydantic import BaseModel
 import discord
 from discord.ext import commands
 from discord import Interaction
-from typing import List
-
-
-class Playerx:
-    """
-    Player class to store the player name and the playing hours.
-    """
-
-    def __init__(self, name: str, dc_number: str, hours: str):
-        self.name = name
-        self.dc_id = dc_number
-        self.hours = hours
-
-    def __str__(self):
-        return (
-            f"Player {self.name} with id: {self.dc_id} has played {self.hours} hours."
-        )
+from .db import Player
 
 
 class DiscordBotConfiguration(BaseModel):
@@ -34,9 +18,9 @@ class DiscordBotConfiguration(BaseModel):
     token: str
 
 
-intents = discord.Intents.default()
-intents.members = True  # Option necessary to get members in guild
-bot = commands.Bot(command_prefix="!", intents=intents)
+# intents = discord.Intents.default()
+# intents.members = True  # Option necessary to get members in guild
+# bot = commands.Bot(command_prefix="!", intents=intents)
 
 
 class PlayerLevelInput(
@@ -46,7 +30,7 @@ class PlayerLevelInput(
     PlayerLevelInput class to create a input menu with for the player levels.
     """
 
-    def __init__(self, player_list: List[Playerx]):
+    def __init__(self, player_list: List[Player]):
         super().__init__()
         self.player_list = player_list
         self.input_valid = True
@@ -74,8 +58,8 @@ class PlayerLevelInput(
             )
             return
         await interaction.response.send_message(
-            "The game was created plan the next steps and start the " +
-            "game when you are ready via the emote.",
+            "The game was created plan the next steps and start the "
+            + "game when you are ready via the emote.",
             ephemeral=True,
         )
         self.stop()
@@ -102,7 +86,7 @@ class UserSelectView(discord.ui.View):
     ):
         # print(select.values)
         # selected = [user.mention for user in select.values
-        self.player_list = [Playerx(user.name, user.id, 0) for user in select.values]
+        self.player_list = [Player(dc_id=user.id, name=user.name, hours=0) for user in select.values]
         player_input = PlayerLevelInput(self.player_list)
         await interaction.response.send_modal(player_input)
         await player_input.wait()
@@ -114,25 +98,7 @@ class UserSelectView(discord.ui.View):
         self.stop()
 
 
-@bot.event
-async def on_ready():
-    """
-    Event function to print a message when the bot is online.
-    """
-    print(f"{bot.user} ist online")
-    try:
-        synced = await bot.tree.sync()
-        print(f"Slash Commands synchronisiert: {len(synced)}")
-    except Exception as e:
-        print(e)
-
-
-@bot.tree.command(
-    name="fast_and_hungry_task_hunt",
-    description="Complete all tasks and survive. The game ends as "
-    "soon as one player has completed all tasks",
-)
-async def game1(interaction: discord.Interaction):
+async def game1(interaction: discord.Interaction, config: DiscordBotConfiguration):
     """
     Command function to start a game with a user selection menu. This game is
     about completing all tasks and surviving. The game ends as soon as one
@@ -161,6 +127,7 @@ async def game1(interaction: discord.Interaction):
                     + f"<@{player.dc_id}> with {player.hours} playing hours\n"
                 )
             await interaction.followup.send(output_message)
+            # ToDo: Spieler abfragen ob schon vorhanden, wenn nicht anlegen, hours updaten und game erstellen
         except Exception as e:
             print(e)
 
@@ -171,16 +138,53 @@ async def game1(interaction: discord.Interaction):
         # print((f"The players for game \"Fast and hungry, task hunt\" are: : {', '.join(selected)}"))
 
 
-async def main():
-    import os
-    from dotenv import load_dotenv
+class DiscordBot:
+    def __init__(self, config):
+        self.config = config
+        intents = discord.Intents.default()
+        intents.members = True
+        self.bot = commands.Bot(command_prefix="!", intents=intents)
 
-    load_dotenv("files/.env", override=True)
-    TOKEN = os.getenv("TT_DC__token")
-    await bot.start(TOKEN)
+        @self.bot.event
+        async def on_ready():
+            await self.on_ready()
+
+        self.register_commands()
+
+    async def start(self):
+        await self.bot.start(self.config.dc.token)
+
+    async def on_ready(self):
+        """
+        Event function to print a message when the bot is online.
+        """
+        print(f"{self.bot.user} ist online")
+        synced = await self.bot.tree.sync()
+        print(f"Slash Commands synchronisiert: {len(synced)}")
+        await self.bot.change_presence(
+            status=discord.Status.online, activity=discord.Game("Don't Starve Together")
+        )
+
+    def register_commands(self):
+        async def wrapped_game1_command(interaction: discord.Interaction):
+            await game1(interaction, self.config)
+        self.bot.tree.command(
+            name="fast_and_hungry_task_hunt",
+            description="Complete all tasks and survive. The game ends as soon as one "
+            "player has completed all tasks",
+        )(wrapped_game1_command)
 
 
-if __name__ == "__main__":
-    import asyncio
+# async def main():
+#     import os
+#     from dotenv import load_dotenv
 
-    asyncio.run(main())
+#     load_dotenv("files/.env", override=True)
+#     TOKEN = os.getenv("TT_DC__token")
+#     await bot.start(TOKEN)
+
+
+# if __name__ == "__main__":
+#     import asyncio
+
+#     asyncio.run(main())

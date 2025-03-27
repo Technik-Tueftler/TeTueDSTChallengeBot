@@ -41,6 +41,7 @@ class Player(Base):
     """
     __tablename__ = "players"
     id: Mapped[int] = mapped_column(primary_key=True)
+    dc_id: Mapped[str] = mapped_column()
     name: Mapped[str] = mapped_column(nullable=False)
     hours: Mapped[int] = mapped_column()
     games = relationship("GamePlayerAssociation", back_populates="player")

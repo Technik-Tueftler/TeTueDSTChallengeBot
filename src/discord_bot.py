@@ -7,7 +7,7 @@ from pydantic import BaseModel
 import discord
 from discord.ext import commands
 from discord import Interaction
-from .db import Player
+from .db import Player, process_player, get_player
 
 
 class DiscordBotConfiguration(BaseModel):
@@ -30,14 +30,16 @@ class PlayerLevelInput(
     PlayerLevelInput class to create a input menu with for the player levels.
     """
 
-    def __init__(self, player_list: List[Player]):
+    def __init__(self, config, player_list: List[Player]):
         super().__init__()
         self.player_list = player_list
         self.input_valid = True
         for player in player_list:
+            default_hours = str(player.hours) if player.hours > 0 else ""
             self.add_item(
                 discord.ui.TextInput(
                     label=player.name,
+                    default=default_hours,
                     placeholder=f"Enter the playing hours for player {player.name}",
                     required=True,
                     max_length=5,
@@ -70,11 +72,11 @@ class UserSelectView(discord.ui.View):
     UserSelectView class to create a view for the user selection menu with handler.
     """
 
-    def __init__(self):
+    def __init__(self, config):
         super().__init__()
         self.player_list = []
         self.valid_input = True
-
+        self.config = config
     @discord.ui.select(
         cls=discord.ui.UserSelect,
         placeholder="Select up to 6 user for the game",
@@ -84,17 +86,12 @@ class UserSelectView(discord.ui.View):
     async def user_select(
         self, interaction: Interaction, select: discord.ui.UserSelect
     ):
-        # print(select.values)
-        # selected = [user.mention for user in select.values
-        self.player_list = [Player(dc_id=user.id, name=user.name, hours=0) for user in select.values]
-        player_input = PlayerLevelInput(self.player_list)
+        translated_player_list = [Player(dc_id=user.id, name=user.name, hours=0) for user in select.values]
+        self.player_list = await process_player(self.config, translated_player_list)
+        player_input = PlayerLevelInput(self.config, self.player_list)
         await interaction.response.send_modal(player_input)
         await player_input.wait()
         self.valid_input = player_input.input_valid
-        print(f"{"#"*10} in UserSelect")
-        for player in self.player_list:
-            print(player)
-        # await interaction.response.send_message(f"The players for game \"Fast and hungry, task hunt\" are: : {', '.join(selected)}")
         self.stop()
 
 
@@ -106,28 +103,23 @@ async def game1(interaction: discord.Interaction, config: DiscordBotConfiguratio
     """
     if interaction.guild:
         try:
-            user_view = UserSelectView()
+            user_view = UserSelectView(config)
             await interaction.response.send_message(
                 'Select the players for the game "Fast and hungry, task hunt":',
                 view=user_view,
                 ephemeral=True,
             )
             await user_view.wait()
-            # print(user_view.children[0].values)
-            # selected = [user.mention for user in user_view.children[0].values]
             if not user_view.valid_input:
                 return
-            print(
-                f"{"#"*10} Create new Game and enter to DB with user_view.player_list"
-            )
             output_message = 'The players for game "Fast and hungry, task hunt" are:\n'
+            await update_player(config, user_view.player_list)
             for player in user_view.player_list:
                 output_message = (
                     output_message
-                    + f"<@{player.dc_id}> with {player.hours} playing hours\n"
+                    + f"<@{player.dc_id}> with {player.hours} playing hours.\n"
                 )
             await interaction.followup.send(output_message)
-            # ToDo: Spieler abfragen ob schon vorhanden, wenn nicht anlegen, hours updaten und game erstellen
         except Exception as e:
             print(e)
 

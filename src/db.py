@@ -6,8 +6,10 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncEngine
+from sqlalchemy.future import select
 
 DB_URL_PATTERN = r"^sqlite\+aiosqlite:///{1,3}(\.\./)*[^/]+/[^/]+\.db$"
+
 
 class Base(DeclarativeBase):
     """Declarative base class
@@ -24,6 +26,7 @@ class GamePlayerAssociation(Base):
     Args:
         Base (_type_): _description_
     """
+
     __tablename__ = "game_player_association"
     id: Mapped[int] = mapped_column(primary_key=True)
     game_id: Mapped[int] = mapped_column(ForeignKey("games.id"))
@@ -39,12 +42,16 @@ class Player(Base):
     Args:
         Base (_type_): _description_
     """
+
     __tablename__ = "players"
     id: Mapped[int] = mapped_column(primary_key=True)
     dc_id: Mapped[str] = mapped_column()
     name: Mapped[str] = mapped_column(nullable=False)
     hours: Mapped[int] = mapped_column()
     games = relationship("GamePlayerAssociation", back_populates="player")
+
+    def __repr__(self) -> str:
+        return f"Name: {self.name!r}, Playtime:{str(self.hours)!r})"
 
 
 class Game(Base):
@@ -103,6 +110,7 @@ class DbConfiguration(BaseModel):
         """
         Pydantic configuration class to define that all types are allowed
         """
+
         arbitrary_types_allowed = True
 
     @field_validator("db_url")
@@ -125,6 +133,42 @@ class DbConfiguration(BaseModel):
             raise ValueError("Invalid connection string. Please check the format.")
         return value
 
+
+async def get_player(config, player: Player) -> Player:
+    async with config.db.session() as session:
+        async with session.begin():
+            player = (
+                await session.execute(
+                    select(Player).filter(Player.dc_id == player.dc_id)
+                )
+            ).scalar_one_or_none()
+    return player
+
+
+async def process_player(config, player_list: list[Player]) -> list[Player]:
+    processed_player_list = []
+    async with config.db.session() as session:
+        for p in player_list:
+            async with session.begin():
+                player = (
+                    await session.execute(
+                        select(Player).filter(Player.dc_id == p.dc_id)
+                    )
+                ).scalar_one_or_none()
+                if player is None:
+                    session.add(p)
+                    await session.commit()
+                    processed_player_list.append(p)
+                    config.watcher.logger.info(
+                        f"Player {p.name} added to the database."
+                    )
+                else:
+                    processed_player_list.append(player)
+    return processed_player_list
+
+
+async def update_player(config, player_list: list[Player]) -> None:
+    ...
 
 async def sync_db(engine: AsyncEngine):
     """

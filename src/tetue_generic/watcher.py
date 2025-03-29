@@ -16,7 +16,7 @@ class WatcherConfiguration(BaseModel):
     log_level: str = ""
     log_file_path: str = ""
     logger: loguru._logger.Logger = None
-  
+
     class Config:
         """
         Pydantic configuration class to define that all types are allowed

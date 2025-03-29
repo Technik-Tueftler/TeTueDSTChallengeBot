@@ -6,11 +6,11 @@ and enables
 - The initialization of submodules and packages.
 - The import and provision of frequently used functions and constants.
 """
+from sqlalchemy.future import select
 from .configuration import *
 from .db import *
 from .discord_bot import *
 from .tetue_generic.generic_requests import *
 from .tetue_generic.watcher import *
-from sqlalchemy.future import select
 __version__ = "v0.1.0"
 __repository__ = "https://github.com/Technik-Tueftler/TeTueDSTChallengeBot"

@@ -2,12 +2,13 @@
 This module contains the discord bot implementation with definitions for the bot and its commands.
 The bot is implemented using the discord.py library and provides a simple command to test the bot.
 """
+
 from typing import List
 from pydantic import BaseModel
 import discord
 from discord.ext import commands
 from discord import Interaction
-from .db import Player, process_player, get_player
+from .db import Player, process_player
 
 
 class DiscordBotConfiguration(BaseModel):
@@ -34,6 +35,7 @@ class PlayerLevelInput(
         super().__init__()
         self.player_list = player_list
         self.input_valid = True
+        self.config = config
         for player in player_list:
             default_hours = str(player.hours) if player.hours > 0 else ""
             self.add_item(
@@ -77,6 +79,7 @@ class UserSelectView(discord.ui.View):
         self.player_list = []
         self.valid_input = True
         self.config = config
+
     @discord.ui.select(
         cls=discord.ui.UserSelect,
         placeholder="Select up to 6 user for the game",
@@ -86,7 +89,18 @@ class UserSelectView(discord.ui.View):
     async def user_select(
         self, interaction: Interaction, select: discord.ui.UserSelect
     ):
-        translated_player_list = [Player(dc_id=user.id, name=user.name, hours=0) for user in select.values]
+        """
+        Function to handle the user selection menu and create a player list.
+        This function is called when the user selects player from the menu and 
+        call the interface to input player information.
+
+        Args:
+            interaction (Interaction): Interaction object
+            select (discord.ui.UserSelect): UserSelect object
+        """
+        translated_player_list = [
+            Player(dc_id=user.id, name=user.name, hours=0) for user in select.values
+        ]
         self.player_list = await process_player(self.config, translated_player_list)
         player_input = PlayerLevelInput(self.config, self.player_list)
         await interaction.response.send_modal(player_input)
@@ -102,35 +116,31 @@ async def game1(interaction: discord.Interaction, config: DiscordBotConfiguratio
     player has completed all tasks.
     """
     if interaction.guild:
-        try:
-            user_view = UserSelectView(config)
-            await interaction.response.send_message(
-                'Select the players for the game "Fast and hungry, task hunt":',
-                view=user_view,
-                ephemeral=True,
+        user_view = UserSelectView(config)
+        await interaction.response.send_message(
+            'Select the players for the game "Fast and hungry, task hunt":',
+            view=user_view,
+            ephemeral=True,
+        )
+        await user_view.wait()
+        if not user_view.valid_input:
+            return
+        output_message = 'The players for game "Fast and hungry, task hunt" are:\n'
+        await process_player(config, user_view.player_list)
+        for player in user_view.player_list:
+            output_message = (
+                output_message
+                + f"<@{player.dc_id}> with {player.hours} playing hours.\n"
             )
-            await user_view.wait()
-            if not user_view.valid_input:
-                return
-            output_message = 'The players for game "Fast and hungry, task hunt" are:\n'
-            await update_player(config, user_view.player_list)
-            for player in user_view.player_list:
-                output_message = (
-                    output_message
-                    + f"<@{player.dc_id}> with {player.hours} playing hours.\n"
-                )
-            await interaction.followup.send(output_message)
-        except Exception as e:
-            print(e)
-
-        # try:
-        #
-        # except Exception as e:
-        # print(e)
-        # print((f"The players for game \"Fast and hungry, task hunt\" are: : {', '.join(selected)}"))
+        await interaction.followup.send(output_message)
 
 
 class DiscordBot:
+    """
+    DiscordBot class to create a discord bot with the given configuration. This is 
+    necessary because of a own implementation with user configuration and
+    pydantic validation.
+    """
     def __init__(self, config):
         self.config = config
         intents = discord.Intents.default()
@@ -144,6 +154,10 @@ class DiscordBot:
         self.register_commands()
 
     async def start(self):
+        """
+        Function to start the bot with the given token from the configuration.
+        This function is called in the main function to start the bot.
+        """
         await self.bot.start(self.config.dc.token)
 
     async def on_ready(self):
@@ -158,8 +172,13 @@ class DiscordBot:
         )
 
     def register_commands(self):
+        """
+        Function to register the commands for the bot. This function is called in the
+        constructor to register the commands.
+        """
         async def wrapped_game1_command(interaction: discord.Interaction):
             await game1(interaction, self.config)
+
         self.bot.tree.command(
             name="fast_and_hungry_task_hunt",
             description="Complete all tasks and survive. The game ends as soon as one "

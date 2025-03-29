@@ -135,6 +135,16 @@ class DbConfiguration(BaseModel):
 
 
 async def get_player(config, player: Player) -> Player:
+    """
+    Function to get a player from the database by dc_id
+
+    Args:
+        config (_type_): App configuration
+        player (Player): Player object to search for
+
+    Returns:
+        Player: Player object from the database or None if not found
+    """
     async with config.db.session() as session:
         async with session.begin():
             player = (
@@ -146,6 +156,17 @@ async def get_player(config, player: Player) -> Player:
 
 
 async def process_player(config, player_list: list[Player]) -> list[Player]:
+    """
+    Function to process a player list and add them to the database if they are not already there.
+    Also update the hours of a player if there are new values.
+
+    Args:
+        config (_type_): _description_
+        player_list (list[Player]): List of players to process
+
+    Returns:
+        list[Player]: processed player list
+    """
     processed_player_list = []
     async with config.db.session() as session:
         for p in player_list:
@@ -163,12 +184,12 @@ async def process_player(config, player_list: list[Player]) -> list[Player]:
                         f"Player {p.name} added to the database."
                     )
                 else:
+                    if p.hours != 0:
+                        player.hours = p.hours
+                        await session.commit()
                     processed_player_list.append(player)
     return processed_player_list
 
-
-async def update_player(config, player_list: list[Player]) -> None:
-    ...
 
 async def sync_db(engine: AsyncEngine):
     """

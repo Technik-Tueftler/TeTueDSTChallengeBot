@@ -8,7 +8,7 @@ from pydantic import BaseModel
 import discord
 from discord.ext import commands
 from discord import Interaction
-from .db import Player, process_player
+from .db import Player, process_player, create_game
 
 
 class DiscordBotConfiguration(BaseModel):
@@ -17,11 +17,6 @@ class DiscordBotConfiguration(BaseModel):
     """
 
     token: str
-
-
-# intents = discord.Intents.default()
-# intents.members = True  # Option necessary to get members in guild
-# bot = commands.Bot(command_prefix="!", intents=intents)
 
 
 class PlayerLevelInput(
@@ -91,7 +86,7 @@ class UserSelectView(discord.ui.View):
     ):
         """
         Function to handle the user selection menu and create a player list.
-        This function is called when the user selects player from the menu and 
+        This function is called when the user selects player from the menu and
         call the interface to input player information.
 
         Args:
@@ -126,7 +121,9 @@ async def game1(interaction: discord.Interaction, config: DiscordBotConfiguratio
         if not user_view.valid_input:
             return
         output_message = 'The players for game "Fast and hungry, task hunt" are:\n'
-        await process_player(config, user_view.player_list)
+        player = await process_player(config, user_view.player_list)
+        game = await create_game(config, "Fast and hungry, task hunt", player)
+        print(game.id)
         for player in user_view.player_list:
             output_message = (
                 output_message
@@ -137,10 +134,11 @@ async def game1(interaction: discord.Interaction, config: DiscordBotConfiguratio
 
 class DiscordBot:
     """
-    DiscordBot class to create a discord bot with the given configuration. This is 
+    DiscordBot class to create a discord bot with the given configuration. This is
     necessary because of a own implementation with user configuration and
     pydantic validation.
     """
+
     def __init__(self, config):
         self.config = config
         intents = discord.Intents.default()
@@ -176,6 +174,7 @@ class DiscordBot:
         Function to register the commands for the bot. This function is called in the
         constructor to register the commands.
         """
+
         async def wrapped_game1_command(interaction: discord.Interaction):
             await game1(interaction, self.config)
 

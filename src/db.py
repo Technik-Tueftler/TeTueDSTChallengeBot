@@ -178,7 +178,7 @@ async def process_player(config, player_list: list[Player]) -> list[Player]:
                 ).scalar_one_or_none()
                 if player is None:
                     session.add(p)
-                    await session.commit()
+                    # await session.commit() <- Nicht benötigt da Transaktionsblock .begin() automatisch mit commit beendet wird
                     processed_player_list.append(p)
                     config.watcher.logger.info(
                         f"Player {p.name} added to the database."
@@ -186,9 +186,26 @@ async def process_player(config, player_list: list[Player]) -> list[Player]:
                 else:
                     if p.hours != 0:
                         player.hours = p.hours
-                        await session.commit()
+                        # await session.commit()
                     processed_player_list.append(player)
     return processed_player_list
+
+
+async def create_game(config, game_name: str, player: list[Player]) -> Game:
+    async with config.db.session() as session:
+        async with session.begin():
+            game = Game(
+                name=game_name,
+                status="running",
+                timestamp=datetime.now()
+            )
+            session.add(game)
+            associations = [
+                GamePlayerAssociation(game=game, player=p) for p in player
+            ]
+            session.add_all(associations)
+        await session.refresh(game)
+        return game
 
 
 async def sync_db(engine: AsyncEngine):

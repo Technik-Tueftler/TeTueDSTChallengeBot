@@ -1,15 +1,30 @@
 """All database related functions are here."""
 
 import re
+from enum import Enum, auto
 from datetime import datetime
 from pydantic import BaseModel, field_validator
 from sqlalchemy import ForeignKey
+from sqlalchemy import Enum as AlchemyEnum
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncEngine
 from sqlalchemy.future import select
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 DB_URL_PATTERN = r"^sqlite\+aiosqlite:///{1,3}(\.\./)*[^/]+/[^/]+\.db$"
 
+class GameStatus(Enum):
+    """Enum for game status"""
+
+    CREATED = auto()
+    RUNNING = auto()
+    PAUSED = auto()
+    STOPPED = auto()
+    FINISHED = auto()
+
+# test_status = GameStatus.RUNNING
+# print((test_status.name).lower() == "running")
+# print(test_status == GameStatus.RUNNING)
 
 class Base(DeclarativeBase):
     """Declarative base class
@@ -64,7 +79,7 @@ class Game(Base):
     __tablename__ = "games"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(nullable=False)
-    status: Mapped[str] = mapped_column()
+    status: Mapped[GameStatus] = mapped_column(AlchemyEnum(GameStatus), default=GameStatus.CREATED)
     timestamp: Mapped[datetime] = mapped_column(nullable=False)
     players = relationship("GamePlayerAssociation", back_populates="game")
 
@@ -192,21 +207,36 @@ async def process_player(config, player_list: list[Player]) -> list[Player]:
 
 
 async def create_game(config, game_name: str, player: list[Player]) -> Game:
-    async with config.db.session() as session:
-        async with session.begin():
-            game = Game(
-                name=game_name,
-                status="running",
-                timestamp=datetime.now()
-            )
-            session.add(game)
-            associations = [
-                GamePlayerAssociation(game=game, player=p) for p in player
-            ]
-            session.add_all(associations)
-        await session.refresh(game)
-        return game
+    """
+    Function to create a game in the database and link all players to the game.
 
+    Args:
+        config (_type_): _description_
+        game_name (str): Game name
+        player (list[Player]): All players in the game
+
+    Returns:
+        Game: Object of the created game for further processing
+    """
+    try:
+        async with config.db.session() as session:
+            async with session.begin():
+                game = Game(
+                    name=game_name,
+                    # status=GameStatus.CREATED,
+                    timestamp=datetime.now()
+                )
+                session.add(game)
+                associations = [
+                    GamePlayerAssociation(game=game, player=p) for p in player
+                ]
+                session.add_all(associations)
+            await session.refresh(game)
+            return game
+    except IntegrityError as err:
+        config.watcher.logger.error(f"Integrity error {str(err)}")
+    except SQLAlchemyError as err:
+        config.watcher.logger.error(f"Database error: {str(err)}", exc_info=True)
 
 async def sync_db(engine: AsyncEngine):
     """

@@ -129,8 +129,22 @@ async def game1(interaction: discord.Interaction, config: DiscordBotConfiguratio
                 output_message
                 + f"<@{player.dc_id}> with {player.hours} playing hours.\n"
             )
-        await interaction.followup.send(output_message)
+        message = await interaction.followup.send(output_message)
+        await message.add_reaction("\U0001F170")
+        await message.add_reaction("👎")
+        print(f"Message-ID: {message.id}")
 
+        try:
+            # Über die Nachrichten ID die Nachricht abrufen
+            new_message = await interaction.channel.fetch_message(int(message.id))
+            # Über die Nachricht ID die Reaktionen abrufen
+            for reaction in new_message.reactions:
+                emoji = reaction.emoji
+                count = reaction.count
+                users = [user async for user in reaction.users()]
+                print(f"Emoji: {emoji}, Anzahl: {count}, Benutzer: {[user.name for user in users]}")
+        except Exception as e:
+            print(f"Error fetching message: {e}")
 
 class DiscordBot:
     """
@@ -198,3 +212,4 @@ class DiscordBot:
 #     import asyncio
 
 #     asyncio.run(main())
+# ich bekomme bei diesem befehl:

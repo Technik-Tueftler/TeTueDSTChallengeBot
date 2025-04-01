@@ -81,6 +81,7 @@ class Game(Base):
     name: Mapped[str] = mapped_column(nullable=False)
     status: Mapped[GameStatus] = mapped_column(AlchemyEnum(GameStatus), default=GameStatus.CREATED)
     timestamp: Mapped[datetime] = mapped_column(nullable=False)
+    message_id: Mapped[str] = mapped_column(nullable=True)
     players = relationship("GamePlayerAssociation", back_populates="game")
 
 
@@ -237,6 +238,20 @@ async def create_game(config, game_name: str, player: list[Player]) -> Game:
         config.watcher.logger.error(f"Integrity error {str(err)}")
     except SQLAlchemyError as err:
         config.watcher.logger.error(f"Database error: {str(err)}", exc_info=True)
+
+
+async def update_db_obj(config, obj: Game | Player) -> None:
+    """
+    Function to update a game or player object in the database
+
+    Args:
+        config (_type_): configuration
+        obj (Game | Player): Object to update in the database
+    """
+    async with config.db.session() as session:
+        async with session.begin():
+            session.add(obj)
+
 
 async def sync_db(engine: AsyncEngine):
     """

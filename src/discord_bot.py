@@ -4,19 +4,11 @@ The bot is implemented using the discord.py library and provides a simple comman
 """
 
 from typing import List
-from pydantic import BaseModel
 import discord
 from discord.ext import commands
 from discord import Interaction
 from .db import Player, process_player, create_game, update_db_obj
-
-
-class DiscordBotConfiguration(BaseModel):
-    """
-    Configuration settings for discord bot
-    """
-
-    token: str
+from .configuration import Configuration
 
 
 class PlayerLevelInput(
@@ -104,7 +96,7 @@ class UserSelectView(discord.ui.View):
         self.stop()
 
 
-async def game1(interaction: discord.Interaction, config: DiscordBotConfiguration):
+async def game1(interaction: discord.Interaction, config: Configuration):
     """
     Command function to start a game with a user selection menu. This game is
     about completing all tasks and surviving. The game ends as soon as one
@@ -132,7 +124,7 @@ async def game1(interaction: discord.Interaction, config: DiscordBotConfiguratio
             )
         output_message += "Each player now receives a private message with the tasks."
         message = await interaction.followup.send(output_message)
-        
+
         await message.add_reaction("1️⃣")
         await message.add_reaction("2️⃣")
         await message.add_reaction("3️⃣")
@@ -209,6 +201,8 @@ class DiscordBot:
             description="Complete all tasks and survive. The game ends as soon as one "
             "player has completed all tasks",
         )(wrapped_game1_command)
+
+
 
 
 # async def main():

@@ -1,17 +1,14 @@
 """All database related functions are here."""
 
-import re
 from enum import Enum, auto
 from datetime import datetime
-from pydantic import BaseModel, field_validator
 from sqlalchemy import ForeignKey
 from sqlalchemy import Enum as AlchemyEnum
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.future import select
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
-DB_URL_PATTERN = r"^sqlite\+aiosqlite:///{1,3}(\.\./)*[^/]+/[^/]+\.db$"
 
 class GameStatus(Enum):
     """Enum for game status"""
@@ -104,50 +101,6 @@ class Items(Base):
 
     def __repr__(self) -> str:
         return f"Name: {self.name!r}, rate:{self.rating!r})"
-
-
-class DbConfiguration(BaseModel):
-    """
-    Configuration settings for db
-    """
-
-    db_url: str = None
-    engine: AsyncEngine = None
-    session: async_sessionmaker = None
-
-    def initialize_db(self):
-        """
-        Function to initialize the database connection
-        """
-        self.engine = create_async_engine(self.db_url)
-        self.session = async_sessionmaker(bind=self.engine, expire_on_commit=False)
-
-    class Config:
-        """
-        Pydantic configuration class to define that all types are allowed
-        """
-
-        arbitrary_types_allowed = True
-
-    @field_validator("db_url")
-    @classmethod
-    def check_db_url(cls, value: str) -> str:
-        """
-        Function to check the db_url input format
-
-        Args:
-            value (str): The db_url as string
-
-        Raises:
-            ValueError: If the db_url does not match the pattern
-
-        Returns:
-            str: The db_url
-        """
-        pattern = DB_URL_PATTERN
-        if not re.match(pattern, value):
-            raise ValueError("Invalid connection string. Please check the format.")
-        return value
 
 
 async def get_player(config, player: Player) -> Player:

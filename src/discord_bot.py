@@ -9,6 +9,7 @@ from discord.ext import commands
 from discord import Interaction
 from .db import Player, process_player, create_game, update_db_obj
 from .configuration import Configuration
+from .game import positions_game_1, initialize_game_1
 
 
 class PlayerLevelInput(
@@ -112,28 +113,25 @@ async def game1(interaction: discord.Interaction, config: Configuration):
         await user_view.wait()
         if not user_view.valid_input:
             return
-        player = await process_player(config, user_view.player_list)
-        game = await create_game(config, "Fast and hungry, task hunt", player)
+        players = await process_player(config, user_view.player_list)
+        game = await create_game(config, "Fast and hungry, task hunt", players)
         output_message = (
             f'The players for game (ID: {game.id}) "Fast and hungry, task hunt" are:\n'
         )
-        for player in user_view.player_list:
+        for player in players:
             output_message = (
                 output_message
                 + f"<@{player.dc_id}> with {player.hours} playing hours.\n"
             )
         output_message += "Each player now receives a private message with the tasks."
         message = await interaction.followup.send(output_message)
-
-        await message.add_reaction("1️⃣")
-        await message.add_reaction("2️⃣")
-        await message.add_reaction("3️⃣")
-        await message.add_reaction("4️⃣")
-        await message.add_reaction("5️⃣")
-        await message.add_reaction("🇭")
-
+        for element in positions_game_1:
+            await message.add_reaction(element)
         game.message_id = message.id
         await update_db_obj(config, game)
+        await initialize_game_1(config, interaction, game, players)
+
+        # await send_player_tasks(config, player, game)
 
         # try:
         #     # Über die Nachrichten ID die Nachricht abrufen

@@ -19,9 +19,6 @@ class GameStatus(Enum):
     STOPPED = auto()
     FINISHED = auto()
 
-# test_status = GameStatus.RUNNING
-# print((test_status.name).lower() == "running")
-# print(test_status == GameStatus.RUNNING)
 
 class Base(DeclarativeBase):
     """Declarative base class
@@ -45,6 +42,7 @@ class GamePlayerAssociation(Base):
     player_id: Mapped[int] = mapped_column(ForeignKey("players.id"))
     game = relationship("Game", back_populates="players")
     player = relationship("Player", back_populates="games")
+    quests = relationship("Quest", back_populates="gameplayerassociation")
 
 
 class Player(Base):
@@ -76,7 +74,9 @@ class Game(Base):
     __tablename__ = "games"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(nullable=False)
-    status: Mapped[GameStatus] = mapped_column(AlchemyEnum(GameStatus), default=GameStatus.CREATED)
+    status: Mapped[GameStatus] = mapped_column(
+        AlchemyEnum(GameStatus), default=GameStatus.CREATED
+    )
     timestamp: Mapped[datetime] = mapped_column(nullable=False)
     message_id: Mapped[str] = mapped_column(nullable=True)
     players = relationship("GamePlayerAssociation", back_populates="game")
@@ -101,6 +101,46 @@ class Items(Base):
 
     def __repr__(self) -> str:
         return f"Name: {self.name!r}, rate:{self.rating!r})"
+
+
+class Quest(Base):
+    """Quests table
+
+    Args:
+        Base (_type_): Basic class that is inherited
+    """
+
+    __tablename__ = "quests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    start_time: Mapped[datetime] = mapped_column(nullable=False)
+    end_time: Mapped[datetime] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(nullable=False)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"))
+    position: Mapped[int] = mapped_column(nullable=False)
+    game_player_association_id: Mapped[int] = mapped_column(
+        ForeignKey("game_player_association.id")
+    )
+
+    task = relationship("Task", back_populates="quests")
+    gameplayerassociation = relationship(
+        "GamePlayerAssociation", back_populates="quests"
+    )
+
+
+class Task(Base):
+    """Task table
+
+    Args:
+        Base (_type_): Basic class that is inherited
+    """
+
+    __tablename__ = "tasks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(nullable=False)
+    description: Mapped[str] = mapped_column(nullable=False)
+    difficulty: Mapped[int] = mapped_column(nullable=False)
+
+    quests = relationship("Quest", back_populates="task")
 
 
 async def get_player(config, player: Player) -> Player:
@@ -178,7 +218,7 @@ async def create_game(config, game_name: str, player: list[Player]) -> Game:
                 game = Game(
                     name=game_name,
                     # status=GameStatus.CREATED,
-                    timestamp=datetime.now()
+                    timestamp=datetime.now(),
                 )
                 session.add(game)
                 associations = [

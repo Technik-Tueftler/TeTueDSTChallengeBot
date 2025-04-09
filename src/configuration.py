@@ -15,6 +15,13 @@ load_dotenv("files/.env", override=True)
 DB_URL_PATTERN = r"^sqlite\+aiosqlite:///{1,3}(\.\./)*[^/]+/[^/]+\.db$"
 
 
+class GeneralGame(BaseModel):
+    """
+    Configuration settings for general game settings
+    """
+    num_quests: int 
+
+
 class DbConfiguration(BaseModel):
     """
     Configuration settings for db
@@ -83,3 +90,4 @@ class Configuration(BaseSettings):
     watcher: WatcherConfiguration
     db: DbConfiguration
     dc: DiscordBotConfiguration
+    game: GeneralGame

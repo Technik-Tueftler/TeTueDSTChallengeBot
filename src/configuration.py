@@ -19,7 +19,7 @@ class GeneralGame(BaseModel):
     """
     Configuration settings for general game settings
     """
-    num_quests: int 
+    num_quests: int
 
 
 class DbConfiguration(BaseModel):

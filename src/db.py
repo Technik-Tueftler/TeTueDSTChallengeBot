@@ -187,7 +187,8 @@ async def process_player(config, player_list: list[Player]) -> list[Player]:
                 ).scalar_one_or_none()
                 if player is None:
                     session.add(p)
-                    # await session.commit() <- Nicht benötigt da Transaktionsblock .begin() automatisch mit commit beendet wird
+                    # Nicht benötigt da Transaktionsblock .begin() auto. mit commit beendet wird
+                    # await session.commit()
                     processed_player_list.append(p)
                     config.watcher.logger.info(
                         f"Player {p.name} added to the database."

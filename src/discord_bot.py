@@ -96,6 +96,16 @@ class UserSelectView(discord.ui.View):
         self.valid_input = player_input.input_valid
         self.stop()
 
+async def setup_game(interaction: discord.Interaction, config: Configuration):
+    """
+    Function game status with a select menu to choose the game status. The game status can be
+    switched based on the current status of the game.
+
+    Args:
+        interaction (discord.Interaction): Interaction object to get the guild
+        config (Configuration): App configuration
+    """
+
 
 async def game1(interaction: discord.Interaction, config: Configuration):
     """
@@ -194,11 +204,19 @@ class DiscordBot:
         async def wrapped_game1_command(interaction: discord.Interaction):
             await game1(interaction, self.config)
 
+        async def wrapped_setup_game(interaction: discord.Interaction):
+            await setup_game(interaction, self.config)
+
         self.bot.tree.command(
             name="fast_and_hungry_task_hunt",
             description="Complete all tasks and survive. The game ends as soon as one "
             "player has completed all tasks",
         )(wrapped_game1_command)
+
+        self.bot.tree.command(
+            name="setup_game",
+            description="Switch game state to specific status like running, paused, finished, etc.",
+        )(wrapped_setup_game)
 
 
 

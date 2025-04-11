@@ -2,8 +2,8 @@
 This file contains all logic for creating a game and managing the game state.
 """
 
-from discord import Interaction
 from datetime import datetime
+from discord import Interaction
 from sqlalchemy import func
 from sqlalchemy.future import select
 from .configuration import Configuration
@@ -13,8 +13,18 @@ positions_game_1 = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣", "🇭"]
 
 
 async def initialize_game_1(
-    config: Configuration, interaction: Interaction, game: Game, players: Player
+    config: Configuration, interaction: Interaction, game: Game, players: list[Player]
 ):
+    """
+    Function to initialize the game and send a message to all players with the
+    tasks they have to complete.
+
+    Args:
+        config (Configuration): App configuration
+        interaction (Interaction): Interaction object to get the guild
+        game (Game): Game object to get the game id
+        players (list[Player]): List of players to get the player ids and send messages with quests
+    """
     for player in players:
         dc_user = await interaction.guild.fetch_member(player.dc_id)
         if dc_user is None:
@@ -47,46 +57,42 @@ async def create_quests(
         player (Player): Player object to get quests for
 
     Returns:
-        list[Quest]: List of quests for the player
+        list[Task]: List of Task for the player
     """
-    try:
-        async with config.db.session() as session:
-            async with session.begin():
-                # ToDo: Hier muss noch rein welche TASKs erlaubt sind bei welcher spielzeit bzw. Spieler-Level
-                # result = (await session.execute(select(Task).where(???).order_by(func.rand()).limit(5))).scalars().all()
-                # tasks = session.execute(select(Quest).order_by(func.random())).first()
-                game_player_association = (
-                    await session.execute(
-                        select(GamePlayerAssociation).where(
-                            GamePlayerAssociation.game_id == game.id,
-                            GamePlayerAssociation.player_id == player.id,
-                        )
+    async with config.db.session() as session:
+        async with session.begin():
+            # ToDo: Hier muss noch rein welche TASKs erlaubt sind bei welcher spielzeit bzw. Spieler-Level
+            # result = (await session.execute(select(Task).where(???).order_by(func.rand()).limit(5))).scalars().all()
+            # tasks = session.execute(select(Quest).order_by(func.random())).first()
+            game_player_association = (
+                await session.execute(
+                    select(GamePlayerAssociation).where(
+                        GamePlayerAssociation.game_id == game.id,
+                        GamePlayerAssociation.player_id == player.id,
                     )
-                ).scalar_one_or_none()
-                # query=session.query(Table); idx=random.randint(0, query.count()); return query[idx]
-                # lst=list(range(count+1));random.shuffle(lst);return lst[:5] wäre mein Ansatz.
-                # Also am ende return [query[x] for x in lst[:5]]
-                print(f"GamePlayerAssociation: {game_player_association.id}")
-                tasks = (
-                    (
-                        await session.execute(
-                            select(Task).order_by(func.random()).limit(5)
-                        )
-                    )
-                    .scalars()
-                    .all()
                 )
-                for i, task in enumerate(tasks, start=1):
-                    quest = Quest(
-                        start_time=datetime.now(),
-                        status="running",
-                        task_id=task.id,
-                        position=i,
-                        game_player_association_id=game_player_association.id,
+            ).scalar_one_or_none()
+            # query=session.query(Table); idx=random.randint(0, query.count()); return query[idx]
+            # lst=list(range(count+1));random.shuffle(lst);return lst[:5] wäre mein Ansatz.
+            # Also am ende return [query[x] for x in lst[:5]]
+            print(f"GamePlayerAssociation: {game_player_association.id}")
+            tasks = (
+                (
+                    await session.execute(
+                        select(Task).order_by(func.random()).limit(5)
                     )
-                    print(f"Quest: {quest.position} / Task: {task.name}")
-                    session.add(quest)
-        return tasks
-    except Exception as e:
-        print(e)
-        return []
+                )
+                .scalars()
+                .all()
+            )
+            for i, task in enumerate(tasks, start=1):
+                quest = Quest(
+                    start_time=datetime.now(),
+                    status="running",
+                    task_id=task.id,
+                    position=i,
+                    game_player_association_id=game_player_association.id,
+                )
+                print(f"Quest: {quest.position} / Task: {task.name}")
+                session.add(quest)
+    return tasks

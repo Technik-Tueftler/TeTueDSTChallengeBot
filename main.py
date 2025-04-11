@@ -1,9 +1,10 @@
 """
 Main function for starting application
 """
-from datetime import datetime
+
 import asyncio
 import src
+from sqlalchemy.orm import selectinload
 
 
 async def onlyonce(config):
@@ -12,41 +13,132 @@ async def onlyonce(config):
     This function is not used in the main application and is only for testing and
     would be removed in the final version.
     """
-    player1 = src.Player(name="technik_tueftler", dc_id="722546721430700314", hours=0)
+    # async with config.db.session() as session:
+    #     async with session.begin():
+    #         task1 = (await session.execute(src.select(src.Task).filter(src.Task.id == 1))).scalar_one_or_none()
+    #         task2 = (await session.execute(src.select(src.Task).filter(src.Task.id == 2))).scalar_one_or_none()
+    #         task3 = (await session.execute(src.select(src.Task).filter(src.Task.id == 3))).scalar_one_or_none()
+    #         task4 = (await session.execute(src.select(src.Task).filter(src.Task.id == 4))).scalar_one_or_none()
+    #         player_1 = (await session.execute(src.select(src.Player).filter(src.Player.dc_id == "722546721430700314"))).scalar_one_or_none()
+    #         player_2 = (await session.execute(src.select(src.Player).filter(src.Player.dc_id == "1142778497702572106"))).scalar_one_or_none()
+    #         game1 = src.Game(
+    #             name="DST",
+    #             status="RUNNING",
+    #             timestamp=src.datetime.now(),
+    #             message_id=1234567890,
+    #         )
+    #         session.add(game1)
+    #         await session.flush()
+    #         print(game1.id)
+    #         player_game1 = src.GamePlayerAssociation(game=game1, player=player_1)
+    #         player_game2 = src.GamePlayerAssociation(game=game1, player=player_2)
+    #         session.add_all([player_game1, player_game2])
+    # async with config.db.session() as session:
+    #     async with session.begin():
+    #         quest1 = src.Quest(
+    #             start_time=src.datetime.now(),
+    #             end_time=src.datetime.now(),
+    #             status="running",
+    #             task_id=task1.id,
+    #             game_player_association_id=player_game1.id,
+    #         )
+    #         quest2 = src.Quest(
+    #             start_time=src.datetime.now(),
+    #             end_time=src.datetime.now(),
+    #             status="running",
+    #             task_id=task2.id,
+    #             game_player_association_id=player_game1.id,
+    #         )
+    #         quest3 = src.Quest(
+    #             start_time=src.datetime.now(),
+    #             end_time=src.datetime.now(),
+    #             status="running",
+    #             task_id=task3.id,
+    #             game_player_association_id=player_game2.id,
+    #         )
+    #         quest4 = src.Quest(
+    #             start_time=src.datetime.now(),
+    #             end_time=src.datetime.now(),
+    #             status="running",
+    #             task_id=task4.id,
+    #             game_player_association_id=player_game2.id,
+    #         )
+    #         quest5 = src.Quest(
+    #             start_time=src.datetime.now(),
+    #             end_time=src.datetime.now(),
+    #             status="running",
+    #             task_id=task4.id,
+    #             game_player_association_id=player_game2.id,
+    #         )
+    #         session.add_all([quest1, quest2, quest3, quest4, quest5])
+
     async with config.db.session() as session:
         async with session.begin():
-            result = await session.execute(src.select(src.Player.name, src.Player.hours, src.Player.dc_id))
-            player = result.fetchall()
-            for p in player:
-                print(p.name, str(p.hours), p.dc_id)
-            # player = (
-            #         await session.execute(
-            #             src.select(src.Player).filter(src.Player.dc_id == player1.dc_id)
-            #         )
-            #     ).scalar_one_or_none()
-            print(player1)
-            print(player)
-        # player1 = src.Player(
-        #     name="Luni",
-        #     dc_id="2234567890",
-        #     hours=2,
-        # )
-        # player2 = src.Player(
-        #     name="JoJo",
-        #     dc_id="1234567890",
-        #     hours=123,
-        # )
-        # game = src.Game(
-        #     name="Among Us",
-        #     status="running",
-        #     timestamp=datetime.now(),
-        # )
+            game = await session.get(
+                src.Game,
+                14,
+                options=[
+                    selectinload(src.Game.players).selectinload(
+                        src.GamePlayerAssociation.player
+                    )
+                ],
+            )
+        players = [association.player for association in game.players]
+        print(players)
 
-        # association1 = src.GamePlayerAssociation(game=game, player=player1)
-        # association2 = src.GamePlayerAssociation(game=game, player=player2)
+        #     task = src.Task(
+        #         name="Boss Kill 4",
+        #         description="Kill the first boss in under 10 days",
+        #         difficulty=100,
+        #     )
+        #     session.add(task)
+        # await session.refresh(task)
+        # print(task.id)
+    # async with config.db.session() as session:
+    #     async with session.begin():
+    #     game1 = src.Game(name="Among Us", status="running", timestamp=src.datetime.now())
+    #     player1 = src.Player(name="Luni", dc_id="722546721430700314", hours=0)
+    #     player_game = src.GamePlayerAssociation(game=game1, player=player1)
+    #     session.add_all([game1, player1, player_game])
+    # await session.refresh(player_game)
+    # print(player_game.id)
+    # quest1 = src.Quest(start_time=src.datetime.now(), end_time=src.datetime.now(), status="running", task_id=task.id)
+    # session.add(quest1)
 
-        # session.add_all([player1, player2, game, association1, association2])
-        # await session.commit()
+    # result = await session.execute(
+    #     src.select(src.Player.name, src.Player.hours, src.Player.dc_id)
+    # )
+    # player = result.fetchall()
+    # for p in player:
+    #     print(p.name, str(p.hours), p.dc_id)
+    # player = (
+    #         await session.execute(
+    #             src.select(src.Player).filter(src.Player.dc_id == player1.dc_id)
+    #         )
+    #     ).scalar_one_or_none()
+    # print(player1)
+    # print(player)
+    # player1 = src.Player(
+    #     name="Luni",
+    #     dc_id="2234567890",
+    #     hours=2,
+    # )
+    # player2 = src.Player(
+    #     name="JoJo",
+    #     dc_id="1234567890",
+    #     hours=123,
+    # )
+    # game = src.Game(
+    #     name="Among Us",
+    #     status="running",
+    #     timestamp=datetime.now(),
+    # )
+
+    # association1 = src.GamePlayerAssociation(game=game, player=player1)
+    # association2 = src.GamePlayerAssociation(game=game, player=player2)
+
+    # session.add_all([player1, player2, game, association1, association2])
+    # await session.commit()
 
 
 async def background_task():
@@ -56,6 +148,7 @@ async def background_task():
     while True:
         print("Test task runs...")
         await asyncio.sleep(10)
+
 
 async def main():
     """

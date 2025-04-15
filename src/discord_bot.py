@@ -10,6 +10,7 @@ from discord import Interaction
 from .db import Player, process_player, create_game, update_db_obj
 from .configuration import Configuration
 from .game import positions_game_1, initialize_game_1
+from .discord_setup_game import setup_game
 
 
 class PlayerLevelInput(
@@ -95,16 +96,6 @@ class UserSelectView(discord.ui.View):
         await player_input.wait()
         self.valid_input = player_input.input_valid
         self.stop()
-
-async def setup_game(interaction: discord.Interaction, config: Configuration):
-    """
-    Function game status with a select menu to choose the game status. The game status can be
-    switched based on the current status of the game.
-
-    Args:
-        interaction (discord.Interaction): Interaction object to get the guild
-        config (Configuration): App configuration
-    """
 
 
 async def game1(interaction: discord.Interaction, config: Configuration):

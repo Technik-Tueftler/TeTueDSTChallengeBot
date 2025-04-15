@@ -1,6 +1,6 @@
 """All database related functions are here."""
 
-from enum import Enum, auto
+from enum import Enum
 from datetime import datetime
 from sqlalchemy import ForeignKey
 from sqlalchemy import Enum as AlchemyEnum
@@ -8,16 +8,28 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.future import select
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from .configuration import Configuration
 
 
 class GameStatus(Enum):
     """Enum for game status"""
 
-    CREATED = auto()
-    RUNNING = auto()
-    PAUSED = auto()
-    STOPPED = auto()
-    FINISHED = auto()
+    CREATED: int = 0
+    RUNNING: int = 1
+    PAUSED: int = 2
+    STOPPED: int = 3
+    FINISHED: int = 4
+
+    @property
+    def icon(self):
+        icons = {
+            GameStatus.CREATED: "🆕",
+            GameStatus.RUNNING: "🎮",
+            GameStatus.PAUSED: "⏸️",
+            GameStatus.STOPPED: "⏹️",
+            GameStatus.FINISHED: "🏁",
+        }
+        return icons[self]
 
 
 class Base(DeclarativeBase):
@@ -80,6 +92,9 @@ class Game(Base):
     timestamp: Mapped[datetime] = mapped_column(nullable=False)
     message_id: Mapped[str] = mapped_column(nullable=True)
     players = relationship("GamePlayerAssociation", back_populates="game")
+
+    def __repr__(self) -> str:
+        return f"ID: {self.id!r}"
 
 
 class Items(Base):
@@ -232,6 +247,29 @@ async def create_game(config, game_name: str, player: list[Player]) -> Game:
         config.watcher.logger.error(f"Integrity error {str(err)}")
     except SQLAlchemyError as err:
         config.watcher.logger.error(f"Database error: {str(err)}", exc_info=True)
+
+
+async def get_changeable_games(config: Configuration) -> list[Game] | None:
+    async with config.db.session() as session:
+        async with session.begin():
+            games = (
+                (
+                    await session.execute(
+                        select(Game).where(
+                            Game.status.in_(
+                                [
+                                    GameStatus.CREATED,
+                                    GameStatus.RUNNING,
+                                    GameStatus.PAUSED,
+                                ]
+                            )
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+    return games
 
 
 async def update_db_obj(config, obj: Game | Player) -> None:

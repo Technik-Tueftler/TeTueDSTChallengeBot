@@ -44,6 +44,7 @@ async def initialize_game_1(
                 for i, task in enumerate(tasks)
             )
         )
+        #ToDo: wenn keine TASKS gefunden werden, wird trotzdem das game auf CREATED erstellt. Es sollte dann direkt in STOPPED gehen
 
 
 async def create_quests(

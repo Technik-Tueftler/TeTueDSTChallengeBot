@@ -11,6 +11,7 @@ from .db import Player, process_player, create_game, update_db_obj
 from .configuration import Configuration
 from .game import positions_game_1, initialize_game_1
 from .discord_setup_game import setup_game
+from .file_utils import load_tasks
 
 
 class PlayerLevelInput(
@@ -180,11 +181,11 @@ class DiscordBot:
         Event function to print a message when the bot is online.
         """
         print(f"{self.bot.user} ist online")
-        synced = await self.bot.tree.sync()
-        print(f"Slash Commands synchronisiert: {len(synced)}")
         await self.bot.change_presence(
             status=discord.Status.online, activity=discord.Game("Don't Starve Together")
         )
+        synced = await self.bot.tree.sync()
+        print(f"Slash Commands synchronisiert: {len(synced)}")
 
     def register_commands(self):
         """
@@ -198,6 +199,9 @@ class DiscordBot:
         async def wrapped_setup_game(interaction: discord.Interaction):
             await setup_game(interaction, self.config)
 
+        async def wrapped_load_tasks(interaction: discord.Interaction):
+            await load_tasks(interaction, self.config)
+
         self.bot.tree.command(
             name="fast_and_hungry_task_hunt",
             description="Complete all tasks and survive. The game ends as soon as one "
@@ -209,7 +213,11 @@ class DiscordBot:
             description="Switch game state to specific status like running, paused, finished, etc.",
         )(wrapped_setup_game)
 
-
+        self.bot.tree.command(
+            name="load_tasks",
+            description="Load and save current game tasks from an Excel spreadsheet or customize" +
+            "existing ones. Comparison takes place via name.",
+        )(wrapped_load_tasks)
 
 
 # async def main():

@@ -152,8 +152,13 @@ class Task(Base):
     __tablename__ = "tasks"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(nullable=False)
+    active: Mapped[bool] = mapped_column(default=True)
+    once: Mapped[bool] = mapped_column(default=False)
+    rating: Mapped[int] = mapped_column(nullable=False)
     description: Mapped[str] = mapped_column(nullable=False)
-    difficulty: Mapped[int] = mapped_column(nullable=False)
+    language: Mapped[str] = mapped_column(nullable=True)
+    game: Mapped[int] = mapped_column(nullable=False)
+    type: Mapped[str] = mapped_column(nullable=False)
 
     quests = relationship("Quest", back_populates="task")
 

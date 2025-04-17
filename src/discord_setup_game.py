@@ -1,12 +1,51 @@
 import discord
 from discord import Interaction
 from .configuration import Configuration
-from .db import get_changeable_games, GameStatus
+from .db import get_changeable_games, GameStatus, get_game_from_id
+
+
+class StatusSelect(discord.ui.Select):
+    def __init__(self, game):
+        if game.status == GameStatus.CREATED:
+            options = [
+                discord.SelectOption(label="RUNNING", value="1"),
+                discord.SelectOption(label="PAUSE", value="2"),
+                discord.SelectOption(label="STOPPED", value="3"),
+            ]
+        elif game.status == GameStatus.RUNNING:
+            options = [
+                discord.SelectOption(label="PAUSE", value="2"),
+                discord.SelectOption(label="STOPPED", value="3"),
+                discord.SelectOption(label="FINISHED", value="4"),
+            ]
+        else:
+            options = [
+                discord.SelectOption(label="RUNNING", value="1"),
+                discord.SelectOption(label="STOPPED", value="3"),
+                discord.SelectOption(label="FINISHED", value="4"),
+            ]
+        super().__init__(
+            placeholder="Wähle eine Sorte...",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content=f"Du hast ausgewählt: {self.values[0]}", view=None
+        )
+
+
+class StatusSelectView(discord.ui.View):
+    def __init__(self, game):
+        super().__init__()
+        self.add_item(StatusSelect(game))
 
 
 class GameSelect(discord.ui.Select):
-    def __init__(self, games):
-        self.selected_game = None
+    def __init__(self, config, games):
+        self.config = config
         options = [
             discord.SelectOption(
                 label=f"{game.id}: {game.timestamp.strftime('%Y-%m-%d')}",
@@ -17,37 +56,26 @@ class GameSelect(discord.ui.Select):
             for game in games
         ]
         super().__init__(
-            placeholder="Select a game ...", min_values=1, max_values=1, options=options
+            placeholder="Select a game...",
+            min_values=1,
+            max_values=1,
+            options=options,
         )
 
     async def callback(self, interaction: discord.Interaction):
-        try:
-            await interaction.response.defer()
-            self.selected_game = int(self.values[0])
-            print(f"in GameSelect:  {self.selected_game}")
-            print(f"ausgabe in callback: {self.values[0]}")
-            self.view.stop()
-        except Exception as e:
-            print(e)
+        self.view.chosen_category = self.values[0]
+        game = await get_game_from_id(self.config, self.values[0])
+        await interaction.response.edit_message(
+            content=f"Du hast {self.values[0]} gewählt. Jetzt wähle eine Sorte:",
+            view=StatusSelectView(game),
+        )
 
 
-class SetupGameSelectView(discord.ui.View):
+class GameSelectView(discord.ui.View):
     def __init__(self, config, games):
-        super().__init__(timeout=120)
-        self.config = config
-        self.selected_game_id = None
-        self.game_select = GameSelect(games)
-        self.add_item(self.game_select)
-
-    async def wait_for_selection(self):
-        try:
-            await self.wait()
-            print(f"in callback SetupGameSelectView: {self.game_select.selected_game}")
-            self.selected_game_id = self.game_select.selected_game
-            print(f"in callback SetupGameSelectView2: {self.selected_game_id}")
-            return self.selected_game_id
-        except Exception as e:
-            print(e)
+        super().__init__()
+        self.chosen_category = None
+        self.add_item(GameSelect(config, games))
 
 
 async def setup_game(interaction: discord.Interaction, config: Configuration):
@@ -60,21 +88,14 @@ async def setup_game(interaction: discord.Interaction, config: Configuration):
         config (Configuration): App configuration
     """
     try:
-        if interaction.guild:
-            games = await get_changeable_games(config)
-            if games:
-                game_select_view = SetupGameSelectView(config, games)
-                await interaction.response.send_message(
-                    "Which game would you like to change the status of?",
-                    view=game_select_view,
-                    ephemeral=True,
-                )
-                await game_select_view.wait()
-                print(f"ausgabe: {game_select_view.selected_game_id}")
-                return
-            await interaction.response.send_message(
-                "There are currently no games that can be changed in status",
-                ephemeral=True,
-            )
+        games = await get_changeable_games(config)
+        select_view = GameSelectView(config, games)
+        await interaction.response.send_message(
+            "Which game would you like to change the status of?",
+            view=select_view,
+            ephemeral=True,
+        )
+        # await select_view.wait()
+        # print(select_view.chosen_category)
     except Exception as err:
         print(err)

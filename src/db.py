@@ -187,7 +187,18 @@ async def get_player(config, player: Player) -> Player:
     return player
 
 
-async def process_player(config, player_list: list[Player]) -> list[Player]:
+async def get_game_from_id(config: Configuration, game_id: str) -> Game:
+    async with config.db.session() as session:
+        async with session.begin():
+            player = (
+                await session.execute(
+                    select(Game).filter(Game.id == game_id)
+                )
+            ).scalar_one_or_none()
+    return player
+
+
+async def process_player(config: Configuration, player_list: list[Player]) -> list[Player]:
     """
     Function to process a player list and add them to the database if they are not already there.
     Also update the hours of a player if there are new values.

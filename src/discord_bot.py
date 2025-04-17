@@ -11,7 +11,7 @@ from .db import Player, process_player, create_game, update_db_obj
 from .configuration import Configuration
 from .game import positions_game_1, initialize_game_1
 from .discord_setup_game import setup_game
-from .file_utils import load_tasks
+from .file_utils import import_tasks, export_tasks
 
 
 class PlayerLevelInput(
@@ -52,8 +52,7 @@ class PlayerLevelInput(
             )
             return
         await interaction.response.send_message(
-            "The game was created plan the next steps and start the "
-            + "game when you are ready via the emote.",
+            "All entries for the game and the players were error-free.",
             ephemeral=True,
         )
         self.stop()
@@ -117,6 +116,19 @@ async def game1(interaction: discord.Interaction, config: Configuration):
             return
         players = await process_player(config, user_view.player_list)
         game = await create_game(config, "Fast and hungry, task hunt", players)
+
+        success = await initialize_game_1(config, interaction, game, players)
+
+        if not success:
+            await interaction.followup.send(
+                (
+                    "An error has occurred while creating the game. Please check the error "
+                    "log and documentation."
+                ),
+                ephemeral=True,
+            )
+            return
+
         output_message = (
             f'The players for game (ID: {game.id}) "Fast and hungry, task hunt" are:\n'
         )
@@ -131,7 +143,6 @@ async def game1(interaction: discord.Interaction, config: Configuration):
             await message.add_reaction(element)
         game.message_id = message.id
         await update_db_obj(config, game)
-        await initialize_game_1(config, interaction, game, players)
 
         # await send_player_tasks(config, player, game)
 
@@ -181,11 +192,11 @@ class DiscordBot:
         Event function to print a message when the bot is online.
         """
         print(f"{self.bot.user} ist online")
+        synced = await self.bot.tree.sync()
+        print(f"Slash Commands synchronisiert: {len(synced)}")
         await self.bot.change_presence(
             status=discord.Status.online, activity=discord.Game("Don't Starve Together")
         )
-        synced = await self.bot.tree.sync()
-        print(f"Slash Commands synchronisiert: {len(synced)}")
 
     def register_commands(self):
         """
@@ -199,8 +210,11 @@ class DiscordBot:
         async def wrapped_setup_game(interaction: discord.Interaction):
             await setup_game(interaction, self.config)
 
-        async def wrapped_load_tasks(interaction: discord.Interaction):
-            await load_tasks(interaction, self.config)
+        async def wrapped_import_tasks(interaction: discord.Interaction):
+            await import_tasks(interaction, self.config)
+
+        async def wrapped_export_tasks(interaction: discord.Interaction):
+            await export_tasks(interaction, self.config)
 
         self.bot.tree.command(
             name="fast_and_hungry_task_hunt",
@@ -214,10 +228,14 @@ class DiscordBot:
         )(wrapped_setup_game)
 
         self.bot.tree.command(
-            name="load_tasks",
-            description="Load and save current game tasks from an Excel spreadsheet or customize" +
-            "existing ones. Comparison takes place via name.",
-        )(wrapped_load_tasks)
+            name="import_tasks",
+            description="Import and update current tasks from an Excel spreadsheet to database.",
+        )(wrapped_import_tasks)
+
+        self.bot.tree.command(
+            name="export_tasks",
+            description="Export current tasks from database to an Excel spreadsheet.",
+        )(wrapped_export_tasks)
 
 
 # async def main():

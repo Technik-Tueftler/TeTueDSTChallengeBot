@@ -4,7 +4,7 @@ Load environment variables and validation of project configurations from user
 import re
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import BaseModel, field_validator, FilePath
+from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncEngine
 from .tetue_generic.generic_requests import GenReqConfiguration
 from .tetue_generic.watcher import WatcherConfiguration
@@ -21,6 +21,7 @@ class GeneralGame(BaseModel):
     """
     num_quests: int
     input_task_path: str
+    export_task_path: str
 
 
 class DbConfiguration(BaseModel):

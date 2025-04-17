@@ -162,6 +162,9 @@ class Task(Base):
 
     quests = relationship("Quest", back_populates="task")
 
+    def __repr__(self) -> str:
+        return f"Name: {self.name!r}, rate:{self.rating!r})"
+
 
 async def get_player(config, player: Player) -> Player:
     """
@@ -238,7 +241,6 @@ async def create_game(config, game_name: str, player: list[Player]) -> Game:
             async with session.begin():
                 game = Game(
                     name=game_name,
-                    # status=GameStatus.CREATED,
                     timestamp=datetime.now(),
                 )
                 session.add(game)
@@ -254,7 +256,17 @@ async def create_game(config, game_name: str, player: list[Player]) -> Game:
         config.watcher.logger.error(f"Database error: {str(err)}", exc_info=True)
 
 
-async def get_changeable_games(config: Configuration) -> list[Game] | None:
+async def get_changeable_games(config: Configuration) -> list[Game]:
+    """
+    This function get all changeable games back. Games that have the status 
+    CREATED, RUNNING or PAUSED can be changed.
+
+    Args:
+        config (Configuration): App configuration
+
+    Returns:
+        list[Game]: The list if changeable games
+    """
     async with config.db.session() as session:
         async with session.begin():
             games = (
@@ -277,7 +289,7 @@ async def get_changeable_games(config: Configuration) -> list[Game] | None:
     return games
 
 
-async def update_db_obj(config, obj: Game | Player) -> None:
+async def update_db_obj(config: Configuration, obj: Game | Player) -> None:
     """
     Function to update a game or player object in the database
 

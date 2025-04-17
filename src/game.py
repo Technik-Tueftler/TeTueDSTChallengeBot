@@ -7,14 +7,19 @@ from discord import Interaction
 from sqlalchemy import func
 from sqlalchemy.future import select
 from .configuration import Configuration
-from .db import Player, Quest, Task, Game, GamePlayerAssociation
+from .db import Player, Quest, Task, Game, GamePlayerAssociation, GameStatus, update_db_obj
 
 positions_game_1 = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣", "🇭"]
 
 
+async def stop_game(config: Configuration, game: Game):
+    game.status = GameStatus.STOPPED
+    await update_db_obj(config, game)
+    config.watcher.logger.info(f"Game with ID: {game.id} was stopped.")
+
 async def initialize_game_1(
     config: Configuration, interaction: Interaction, game: Game, players: list[Player]
-):
+) -> bool:
     """
     Function to initialize the game and send a message to all players with the
     tasks they have to complete.
@@ -25,27 +30,33 @@ async def initialize_game_1(
         game (Game): Game object to get the game id
         players (list[Player]): List of players to get the player ids and send messages with quests
     """
-    for player in players:
-        dc_user = await interaction.guild.fetch_member(player.dc_id)
-        if dc_user is None:
-            config.logger.error(
-                f"User {player.name} not found in the guild with dc_id: {player.dc_id}."
+    try:
+        for player in players:
+            dc_user = await interaction.guild.fetch_member(player.dc_id)
+            if dc_user is None:
+                config.logger.error(
+                    f"User {player.name} not found in the guild with dc_id: {player.dc_id}."
+                )
+                await stop_game(config, game)
+                break
+            tasks = await create_quests(config, player, game)
+            if not tasks:
+                config.watcher.logger.error(f"No tasks found for player: {player.name}.")
+                await stop_game(config, game)
+                break
+            await dc_user.send(
+                f"Hello {dc_user.name}, you are now in the game "
+                f'"{game.name}". You have to complete the following quests:\n'
+                + "\n".join(
+                    f"{positions_game_1[i]} {task.name}: {task.description}"
+                    for i, task in enumerate(tasks)
+                )
             )
-            continue
-        tasks = await create_quests(config, player, game)
-        if not tasks:
-            print("No tasks found for the player.")
-            continue
-        await dc_user.send(
-            f"Hello {dc_user.name}, you are now in the game "
-            f'"{game.name}". You have to complete the following quests:\n'
-            + "\n".join(
-                f"{positions_game_1[i]} {task.name}: {task.description}"
-                for i, task in enumerate(tasks)
-            )
-        )
-        #ToDo: wenn keine TASKS gefunden werden, wird trotzdem das game auf CREATED erstellt. Es sollte dann direkt in STOPPED gehen
-
+        else:
+            return True
+        return False
+    except Exception as err:
+        print(err)
 
 async def create_quests(
     config: Configuration, player: Player, game: Game

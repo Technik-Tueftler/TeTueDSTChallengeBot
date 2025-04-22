@@ -1,11 +1,13 @@
 import discord
 from discord import Interaction
 from .configuration import Configuration
-from .db import get_changeable_games, GameStatus, get_game_from_id
+from .db import get_changeable_games, GameStatus, get_game_from_id, update_db_obj
 
 
 class StatusSelect(discord.ui.Select):
-    def __init__(self, game):
+    def __init__(self, config, game):
+        self.game = game
+        self.config = config
         if game.status == GameStatus.CREATED:
             options = [
                 discord.SelectOption(label="RUNNING", value="1"),
@@ -25,22 +27,37 @@ class StatusSelect(discord.ui.Select):
                 discord.SelectOption(label="FINISHED", value="4"),
             ]
         super().__init__(
-            placeholder="Wähle eine Sorte...",
+            placeholder="Select the destination status...",
             min_values=1,
             max_values=1,
             options=options,
         )
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(
-            content=f"Du hast ausgewählt: {self.values[0]}", view=None
-        )
+        try:
+            old_status_name = self.game.status.name
+            self.game.status = GameStatus(int(self.values[0]))
+            new_status_name = self.game.status.name
+            await update_db_obj(self.config, self.game)
+            await interaction.response.edit_message(
+                content=(
+                    f"You have changed the status of game {self.game.id} from {old_status_name} "
+                    f"to {new_status_name}"
+                ),
+                view=None,
+            )
+            await interaction.followup.send(
+                f"The status of game with ID: {self.game.id} has been set to: {new_status_name}",
+                ephemeral=False,
+            )
+        except Exception as err:
+            print(err)
 
 
 class StatusSelectView(discord.ui.View):
-    def __init__(self, game):
+    def __init__(self, config, game):
         super().__init__()
-        self.add_item(StatusSelect(game))
+        self.add_item(StatusSelect(config, game))
 
 
 class GameSelect(discord.ui.Select):
@@ -66,8 +83,8 @@ class GameSelect(discord.ui.Select):
         self.view.chosen_category = self.values[0]
         game = await get_game_from_id(self.config, self.values[0])
         await interaction.response.edit_message(
-            content=f"Du hast {self.values[0]} gewählt. Jetzt wähle eine Sorte:",
-            view=StatusSelectView(game),
+            content=f"You have chosen the game with id {game.id}. Now select the status:",
+            view=StatusSelectView(self.config, game),
         )
 
 

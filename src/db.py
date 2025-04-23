@@ -22,6 +22,9 @@ class GameStatus(Enum):
 
     @property
     def icon(self):
+        """
+        Status assignment icon
+        """
         icons = {
             GameStatus.CREATED: "🆕",
             GameStatus.RUNNING: "🎮",
@@ -166,7 +169,7 @@ class Task(Base):
         return f"Name: {self.name!r}, rate:{self.rating!r})"
 
 
-async def get_player(config, player: Player) -> Player:
+async def get_player(config, player: Player) -> Player | None:
     """
     Function to get a player from the database by dc_id
 
@@ -187,18 +190,28 @@ async def get_player(config, player: Player) -> Player:
     return player
 
 
-async def get_game_from_id(config: Configuration, game_id: str) -> Game:
+async def get_game_from_id(config: Configuration, game_id: str) -> Game | None:
+    """
+    Function to get a game from the database by id
+
+    Args:
+        config (Configuration): App configuration
+        game_id (str): Game id from DB
+
+    Returns:
+        Game: Game object from the database or None if not found
+    """
     async with config.db.session() as session:
         async with session.begin():
             player = (
-                await session.execute(
-                    select(Game).filter(Game.id == game_id)
-                )
+                await session.execute(select(Game).filter(Game.id == game_id))
             ).scalar_one_or_none()
     return player
 
 
-async def process_player(config: Configuration, player_list: list[Player]) -> list[Player]:
+async def process_player(
+    config: Configuration, player_list: list[Player]
+) -> list[Player]:
     """
     Function to process a player list and add them to the database if they are not already there.
     Also update the hours of a player if there are new values.
@@ -269,7 +282,7 @@ async def create_game(config, game_name: str, player: list[Player]) -> Game:
 
 async def get_changeable_games(config: Configuration) -> list[Game]:
     """
-    This function get all changeable games back. Games that have the status 
+    This function get all changeable games back. Games that have the status
     CREATED, RUNNING or PAUSED can be changed.
 
     Args:

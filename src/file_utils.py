@@ -2,6 +2,7 @@
 Here are all the functions needed to import and synchronize important game
 information from the game master.
 """
+
 from pathlib import Path
 from datetime import datetime
 import discord
@@ -121,20 +122,27 @@ async def import_tasks(interaction: discord.Interaction, config: Configuration):
 
 
 async def export_tasks(interaction: discord.Interaction, config: Configuration):
+    """
+    Scheduling function for exporting existing tasks from datebase.
+
+    Args:
+        interaction (discord.Interaction): Interaction object to get the guild
+        config (Configuration): App configuration
+    """
     try:
         async with config.db.session() as session:
             async with session.begin():
                 tasks = (await session.execute(select(Task))).scalars().all()
         data = [
             {
-                    "name": task.name,
-                    "active": "yes" if task.active else "No",
-                    "once": "yes" if task.once else "No",
-                    "rating": task.rating,
-                    "description": task.description,
-                    "language": task.language, 
-                    "game": task.game,
-                    "type": task.type
+                "name": task.name,
+                "active": "yes" if task.active else "No",
+                "once": "yes" if task.once else "No",
+                "rating": task.rating,
+                "description": task.description,
+                "language": task.language,
+                "game": task.game,
+                "type": task.type,
             }
             for task in tasks
         ]
@@ -142,6 +150,8 @@ async def export_tasks(interaction: discord.Interaction, config: Configuration):
         date = datetime.now().strftime("%Y_%m_%d")
         path_file = Path("files") / f"{date}_tasks.xlsx"
         df.to_excel(path_file, index=False)
-        await interaction.response.send_message(f"Export is generated and saved: {path_file}.", ephemeral=True)
-    except Exception as err:
-        print(err)
+        await interaction.response.send_message(
+            f"Export is generated and saved: {path_file}.", ephemeral=True
+        )
+    except discord.errors.Forbidden as err:
+        config.watcher.logger.error(f"Error during callback with DC permissons: {err}")

@@ -10,6 +10,7 @@ from sqlalchemy.future import select
 from .configuration import *
 from .db import *
 from .discord_bot import *
+from .game import *
 from .tetue_generic.generic_requests import *
 from .tetue_generic.watcher import *
 __version__ = "v0.1.0"

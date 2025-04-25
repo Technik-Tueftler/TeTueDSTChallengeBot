@@ -38,7 +38,9 @@ class PlayerLevelInput(
                 )
             )
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(
+        self, interaction: discord.Interaction
+    ):  # pylint: disable=arguments-differ
         mapping = {child.label: child.value for child in self.children}
         for player in self.player_list:
             player.hours = mapping[player.name]

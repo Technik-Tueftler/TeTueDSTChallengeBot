@@ -58,6 +58,7 @@ class GamePlayerAssociation(Base):
     game = relationship("Game", back_populates="players")
     player = relationship("Player", back_populates="games")
     quests = relationship("Quest", back_populates="gameplayerassociation")
+    rank = relationship("Rank", back_populates="gameplayerassociation")
 
 
 class Player(Base):
@@ -74,9 +75,47 @@ class Player(Base):
     name: Mapped[str] = mapped_column(nullable=False)
     hours: Mapped[int] = mapped_column()
     games = relationship("GamePlayerAssociation", back_populates="player")
+    league = relationship("League", back_populates="player", uselist=False)
 
     def __repr__(self) -> str:
         return f"Name: {self.name!r}, Playtime:{str(self.hours)!r})"
+
+
+class League(Base):
+    """League table
+
+    Args:
+        Base (_type_): Basic class that is inherited
+    """
+
+    __tablename__ = "league"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    points: Mapped[int] = mapped_column(nullable=False)
+    player_id: Mapped[int] = mapped_column(ForeignKey("players.id"))
+    survived: Mapped[int] = mapped_column(nullable=False)
+    player: Mapped[Player] = relationship("Player", back_populates="league")
+
+    def __repr__(self) -> str:
+        return f"Place: {self.id!r}, points:{str(self.points)!r})"
+
+
+class Rank(Base):
+    """List of ranks for each player per game
+
+    Args:
+        Base (_type_): Basic class that is inherited
+    """
+
+    __tablename__ = "ranks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    placement: Mapped[int] = mapped_column(nullable=True)
+    points: Mapped[int] = mapped_column(nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(nullable=False)
+    survived: Mapped[int] = mapped_column(nullable=False)
+    game_player_association_id: Mapped[int] = mapped_column(
+        ForeignKey("game_player_association.id")
+    )
+    gameplayerassociation = relationship("GamePlayerAssociation", back_populates="rank")
 
 
 class Game(Base):
@@ -92,6 +131,7 @@ class Game(Base):
     status: Mapped[GameStatus] = mapped_column(
         AlchemyEnum(GameStatus), default=GameStatus.CREATED
     )
+    playing_days: Mapped[int] = mapped_column(default=70)
     timestamp: Mapped[datetime] = mapped_column(nullable=False)
     message_id: Mapped[str] = mapped_column(nullable=True)
     players = relationship("GamePlayerAssociation", back_populates="game")
@@ -169,7 +209,7 @@ class Task(Base):
         return f"Name: {self.name!r}, rate:{self.rating!r})"
 
 
-async def get_player(config, player: Player) -> Player | None:
+async def get_player(config, player_id: int) -> Player | None:
     """
     Function to get a player from the database by dc_id
 
@@ -184,7 +224,7 @@ async def get_player(config, player: Player) -> Player | None:
         async with session.begin():
             player = (
                 await session.execute(
-                    select(Player).filter(Player.dc_id == player.dc_id)
+                    select(Player).filter(Player.id == player_id)
                 )
             ).scalar_one_or_none()
     return player

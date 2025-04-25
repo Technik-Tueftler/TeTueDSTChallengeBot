@@ -22,6 +22,8 @@ class GeneralGame(BaseModel):
     num_quests: int
     input_task_path: str
     export_task_path: str
+    weighted_hours_g1: float
+    weighted_league_pos_g1: float
 
 
 class DbConfiguration(BaseModel):

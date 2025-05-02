@@ -96,7 +96,7 @@ class League(Base):
     player: Mapped[Player] = relationship("Player", back_populates="league")
 
     def __repr__(self) -> str:
-        return f"Place: {self.id!r}, points:{str(self.points)!r})"
+        return f"Player: {self.player_id!r} / Place: {self.id!r} / points:{self.points!r} / survived:{self.survived!r})"
 
 
 class Rank(Base):
@@ -223,9 +223,7 @@ async def get_player(config, player_id: int) -> Player | None:
     async with config.db.session() as session:
         async with session.begin():
             player = (
-                await session.execute(
-                    select(Player).filter(Player.id == player_id)
-                )
+                await session.execute(select(Player).filter(Player.id == player_id))
             ).scalar_one_or_none()
     return player
 

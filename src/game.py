@@ -159,8 +159,6 @@ async def create_quests(
             # (3) quest aus task erstellen und eintragen
 
             player_rank = await get_player_rank(config, player, prepr_game_stats)
-            
-
 
             tasks = (
                 (await session.execute(select(Task).order_by(func.random()).limit(5)))
@@ -187,53 +185,49 @@ async def generate_league_table(config: Configuration) -> None:
     Args:
         config (Configuration): App configuration
     """
-    try:
-        async with config.db.session() as session:
-            async with session.begin():
-                ranks = (
-                    await session.execute(
-                        select(Rank, GamePlayerAssociation.player_id).join(
-                            GamePlayerAssociation,
-                            Rank.game_player_association_id == GamePlayerAssociation.id,
-                        )
+    async with config.db.session() as session:
+        async with session.begin():
+            ranks = (
+                await session.execute(
+                    select(Rank, GamePlayerAssociation.player_id).join(
+                        GamePlayerAssociation,
+                        Rank.game_player_association_id == GamePlayerAssociation.id,
                     )
-                    # .all()
                 )
+                # .all()
+            )
 
-        player_data = defaultdict(
-            lambda: {"ranks": [], "total_points": 0, "total_survived": 0}
-        )
-        for rank, player_id in ranks:
-            player_data[player_id]["ranks"].append(rank)
-            player_data[player_id]["total_points"] += rank.points
-            player_data[player_id]["total_survived"] += rank.survived
+    player_data = defaultdict(
+        lambda: {"ranks": [], "total_points": 0, "total_survived": 0}
+    )
+    for rank, player_id in ranks:
+        player_data[player_id]["ranks"].append(rank)
+        player_data[player_id]["total_points"] += rank.points
+        player_data[player_id]["total_survived"] += rank.survived
 
-        sorted_players = sorted(
-            player_data.items(),  # (player_id, values)
-            # key=lambda x: x[1]["total_points"],
-            key=lambda x: (x[1]["total_points"], x[1]["total_survived"]),
-            reverse=True,
-        )
+    sorted_players = sorted(
+        player_data.items(),
+        key=lambda x: (x[1]["total_points"], x[1]["total_survived"]),
+        reverse=True,
+    )
 
-        # for player_id, value in sorted_players:
-        # for index, (player_id, value) in enumerate(sorted_players, start=1):
-        #     print(index, player_id, value["total_points"], value["total_survived"])
-
-        async with config.db.session() as session:
-            async with session.begin():
-                await session.execute(delete(League))
-                for player_id, value in sorted_players:
-                    player = await get_player(config, player_id)
-                    session.add(
-                        League(
-                            player=player,
-                            points=value["total_points"],
-                            survived=value["total_survived"],
-                        )
+    async with config.db.session() as session:
+        async with session.begin():
+            await session.execute(delete(League))
+            for player_id, value in sorted_players:
+                player = await get_player(config, player_id)
+                session.add(
+                    League(
+                        player=player,
+                        points=value["total_points"],
+                        survived=value["total_survived"],
                     )
-
-    except Exception as err:
-        print(err)
+                )
+                config.watcher.logger.info("League table generated")
+                config.watcher.logger.debug(
+                    f"Player: {player.name}, Points: {value['total_points']}, "
+                    f"Survived: {value['total_survived']}"
+                )
 
 
 async def get_player_rank(
@@ -258,26 +252,3 @@ async def get_player_rank(
     ) + config.game.weighted_league_pos_g1 * (
         1 - ((league_position - 1) / (prepr_game_stats.count_league_participants - 1))
     )
-
-
-# async def get_player_league_position(config: Configuration, player: Player) -> int:
-#     """
-#     Function to get the player league position based on the playing hours.
-
-#     Args:
-#         config (Configuration): App configuration
-#         player (Player): Player object to get quests for
-
-#     Returns:
-#         int: League position of the player
-#     """
-#     async with config.db.session() as session:
-#         async with session.begin():
-#             result = (
-#                 await session.execute(
-#                     select(GamePlayerAssociation)
-#                     .where(GamePlayerAssociation.player_id == player.id)
-#                     .order_by(GamePlayerAssociation.hours.desc())
-#                 )
-#             ).scalars().all()
-#             return len(result) + 1

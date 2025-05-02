@@ -4,7 +4,9 @@ Main function for starting application
 
 import asyncio
 import src
+from sqlalchemy import text, func
 from sqlalchemy.orm import selectinload
+from sqlalchemy.future import select
 
 
 async def onlyonce(config):
@@ -13,6 +15,41 @@ async def onlyonce(config):
     This function is not used in the main application and is only for testing and
     would be removed in the final version.
     """
+    try:
+        async with config.db.session() as session:
+            async with session.begin():
+                # await src.generate_league_table(config)
+                result = await session.execute(
+                    select(src.Player)
+                    .options(selectinload(src.Player.league))  # Eager Loading
+                    .where(src.Player.dc_id == "722546721430700314")
+                )
+                player = result.scalar_one()
+                print(player)
+                print(player.league.points)
+                # print(f"Player: {player.name}, League-Punkte: {player.league}")
+        async with config.db.session() as session:
+            result = (await session.execute(select(func.count()).select_from(src.League))).scalar_one()
+            print(f"Anzahl Einträge: {result}")
+            count_max_hours_tbl = (
+                await session.execute(select(func.max(src.Player.hours)))
+            ).scalar_one_or_none()
+
+
+        prepr_game_stats = src.GameStats()
+        await prepr_game_stats.process_league_stats(config)
+        # print(prepr_game_stats.count_league_participants)
+        # print(prepr_game_stats.max_hours)
+        async with config.db.session() as session:
+            async with session.begin():
+                result = (await session.scalars(select(src.Player))).all()
+            for player in result:
+                player_rank = await src.get_player_rank(config, player, prepr_game_stats)
+                print(f"Player: {player.name}, Rank: {player_rank}")
+        
+
+    except Exception as e:
+        print("Error in main function:", e)
     # async with config.db.session() as session:
     #     async with session.begin():
     #         task1 = (await session.execute(src.select(src.Task).filter(src.Task.id == 1))).scalar_one_or_none()
@@ -72,28 +109,28 @@ async def onlyonce(config):
     #         )
     #         session.add_all([quest1, quest2, quest3, quest4, quest5])
 
-    async with config.db.session() as session:
-        async with session.begin():
-            game = await session.get(
-                src.Game,
-                14,
-                options=[
-                    selectinload(src.Game.players).selectinload(
-                        src.GamePlayerAssociation.player
-                    )
-                ],
-            )
-        players = [association.player for association in game.players]
-        print(players)
+    # async with config.db.session() as session:
+    #     async with session.begin():
+    #         game = await session.get(
+    #             src.Game,
+    #             14,
+    #             options=[
+    #                 selectinload(src.Game.players).selectinload(
+    #                     src.GamePlayerAssociation.player
+    #                 )
+    #             ],
+    #         )
+    #     players = [association.player for association in game.players]
+    #     print(players)
 
-        #     task = src.Task(
-        #         name="Boss Kill 4",
-        #         description="Kill the first boss in under 10 days",
-        #         difficulty=100,
-        #     )
-        #     session.add(task)
-        # await session.refresh(task)
-        # print(task.id)
+    #     task = src.Task(
+    #         name="Boss Kill 4",
+    #         description="Kill the first boss in under 10 days",
+    #         difficulty=100,
+    #     )
+    #     session.add(task)
+    # await session.refresh(task)
+    # print(task.id)
     # async with config.db.session() as session:
     #     async with session.begin():
     #     game1 = src.Game(name="Among Us", status="running", timestamp=src.datetime.now())
@@ -160,8 +197,8 @@ async def main():
     await src.sync_db(config.db.engine)
     src.watcher.logger.info(f"Start application in version: {src.__version__}")
     discord_bot = src.DiscordBot(config)
-    tasks = [discord_bot.start()]
-    tasks.append(background_task())
+    tasks = [discord_bot.start(), src.generate_league_table(config)]
+    # tasks.append(background_task())
     # tasks.append(onlyonce(config))
     await asyncio.gather(*tasks)
 

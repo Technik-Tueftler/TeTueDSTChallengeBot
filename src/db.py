@@ -2,7 +2,7 @@
 
 from enum import Enum
 from datetime import datetime
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, func
 from sqlalchemy import Enum as AlchemyEnum
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -349,6 +349,22 @@ async def get_changeable_games(config: Configuration) -> list[Game]:
                 .all()
             )
     return games
+
+
+async def get_random_tasks(config: Configuration, limit: int) -> list[Task]:
+    """
+    This function gets a list of random tasks from the database.
+    The number of tasks is limited by the limit parameter.
+
+    Args:
+        config (Configuration): App configuration
+        limit (int): number of tasks to get
+
+    Returns:
+        list[Task]: Tasks from the database
+    """
+    async with config.db.session() as session:
+        return (await session.execute(select(Task).order_by(func.random()).limit(5))).scalars().all()
 
 
 async def update_db_obj(config: Configuration, obj: Game | Player) -> None:

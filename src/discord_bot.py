@@ -41,23 +41,26 @@ class PlayerLevelInput(
     async def on_submit(
         self, interaction: discord.Interaction
     ):  # pylint: disable=arguments-differ
-        mapping = {child.label: child.value for child in self.children}
-        for player in self.player_list:
-            player.hours = mapping[player.name]
-            if not player.hours.isdigit():
-                self.input_valid = False
-                break
-        if not self.input_valid:
+        try:
+            mapping = {child.label: child.value for child in self.children}
+            for player in self.player_list:
+                if not mapping[player.name].isdigit():
+                    self.input_valid = False
+                    break
+                player.hours = mapping[player.name]
+            if not self.input_valid:
+                await interaction.response.send_message(
+                    "Please enter only numbers for the playing hours.",
+                    ephemeral=True,
+                )
+                return
             await interaction.response.send_message(
-                "Please enter only numbers for the playing hours.",
+                "All entries for the game and the players were error-free.",
                 ephemeral=True,
             )
-            return
-        await interaction.response.send_message(
-            "All entries for the game and the players were error-free.",
-            ephemeral=True,
-        )
-        self.stop()
+            self.stop()
+        except AttributeError as err:
+            self.config.watcher.logger.error(f"Error during on_submit in PlayerLevelInput: {err}")
 
 
 class UserSelectView(discord.ui.View):

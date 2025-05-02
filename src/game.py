@@ -4,7 +4,7 @@ This file contains all logic for creating a game and managing the game state.
 
 from datetime import datetime
 from collections import defaultdict
-from discord import Interaction
+from discord import Interaction, errors
 from sqlalchemy import func, delete
 from sqlalchemy.future import select
 from .configuration import Configuration
@@ -30,9 +30,11 @@ class GameStats:
     """
 
     def __init__(self):
-        print("GameStats initialized")
         self.count_league_participants = 0
         self.max_hours = 0
+
+    def __repr__(self):
+        return f"Gamestats: {str(self.max_hours)}"
 
     async def process_league_stats(self, config: Configuration):
         try:
@@ -88,7 +90,11 @@ async def initialize_game_1(
         players (list[Player]): List of players to get the player ids and send messages with quests
     """
     try:
-        prepr_game_stats = await GameStats().process_league_stats(config)
+        game_statistics = GameStats()
+        config.watcher.logger.debug(game_statistics)
+        await game_statistics.process_league_stats(config)
+        config.watcher.logger.debug(game_statistics)
+        # TODO: eventuell mit dem kleinsten Spieler anfangen?
         players.sort(key=lambda x: x.hours, reverse=True)
         for player in players:
             dc_user = await interaction.guild.fetch_member(player.dc_id)
@@ -98,7 +104,7 @@ async def initialize_game_1(
                 )
                 await stop_game(config, game)
                 break
-            tasks = await create_quests(config, player, game, prepr_game_stats)
+            tasks = await create_quests(config, player, game, game_statistics)
             if not tasks:
                 config.watcher.logger.error(
                     f"No tasks found for player: {player.name}."
@@ -116,8 +122,12 @@ async def initialize_game_1(
         else:
             return True
         return False
-    except Exception as err:
-        print(err)
+    except errors.Forbidden as err:
+        config.watcher.logger.error(
+            f"Error sending message to user {player.name} with dc_id: {player.dc_id}. "
+            f"Error: {err}"
+        )
+        await stop_game(config, game)
 
 
 async def create_quests(
@@ -135,9 +145,6 @@ async def create_quests(
     """
     async with config.db.session() as session:
         async with session.begin():
-            # ToDo: Hier muss noch rein welche TASKs erlaubt sind bei welcher spielzeit bzw. Spieler-Level
-            # result = (await session.execute(select(Task).where(???).order_by(func.rand()).limit(5))).scalars().all()
-            # tasks = session.execute(select(Quest).order_by(func.random())).first()
             game_player_association = (
                 await session.execute(
                     select(GamePlayerAssociation).where(
@@ -159,6 +166,15 @@ async def create_quests(
             # (3) quest aus task erstellen und eintragen
 
             player_rank = await get_player_rank(config, player, prepr_game_stats)
+
+            # Player: MAX, Rank 1.00 -> 100 / 5 Aufgaben -> 20P/Aufgabe
+            # Player: technik_tueftler, Rank: 0.88 -> 88 / 5 Aufgaben -> 18P/Aufgabe
+            # Player: tetues_helferlein, Rank: 0.7849999999999999
+            # Player: deyril, Rank: 0.6
+            # Player: hausi__, Rank: 0.36
+            # Player: marshel2708, Rank: 0.24
+            # Player: timdeutschland, Rank: 0.11999999999999997 -> 12 / 5 Aufgaben -> 3P/Aufgabe
+            # Player: irrelady, Rank: 0.0
 
             tasks = (
                 (await session.execute(select(Task).order_by(func.random()).limit(5)))
@@ -223,32 +239,80 @@ async def generate_league_table(config: Configuration) -> None:
                         survived=value["total_survived"],
                     )
                 )
-                config.watcher.logger.info("League table generated")
                 config.watcher.logger.debug(
                     f"Player: {player.name}, Points: {value['total_points']}, "
                     f"Survived: {value['total_survived']}"
                 )
+    config.watcher.logger.info("League table generated")
 
 
 async def get_player_rank(
     config: Configuration, player: Player, prepr_game_stats: GameStats
 ) -> int:
-    hours = player.hours
-    league_position = 0
-    async with config.db.session() as session:
-        async with session.begin():
-            league_position_tbl = (
-                await session.execute(
-                    select(League).filter(League.player_id == player.id)
-                )
-            ).scalar_one_or_none()
-    if league_position_tbl:
-        league_position = league_position_tbl.id
-    if not await prepr_game_stats.rank_calculation_possible():
-        return 0.0
+    """
+    Function calculate the rank of a player based on the playing hours and league position.
+    The rank is calculated based on the formula PLAYER_RANK_G1
 
-    return config.game.weighted_hours_g1 * (
-        hours / prepr_game_stats.max_hours
-    ) + config.game.weighted_league_pos_g1 * (
-        1 - ((league_position - 1) / (prepr_game_stats.count_league_participants - 1))
+    Args:
+        config (Configuration): App configuration
+        player (Player): Player to calculate the rank
+        prepr_game_stats (GameStats): Complete game statistics
+
+    Returns:
+        int: Rank fore the player based on formula
+    """
+    config.watcher.logger.trace(
+        f"Entry into get_player_rank with player: {player.name}"
     )
+    try:
+        hours = int(player.hours)
+        league_position = 0
+        async with config.db.session() as session:
+            async with session.begin():
+                league_position_tbl = (
+                    await session.execute(
+                        select(League).filter(League.player_id == player.id)
+                    )
+                ).scalar_one_or_none()
+        if league_position_tbl:
+            league_position = league_position_tbl.id
+        if not await prepr_game_stats.rank_calculation_possible():
+            return 0.0
+
+        # TODO: trace logging in extra Funktion auslagern?
+        config.watcher.logger.trace(
+            f"hours: {hours} ({type(hours)}) "
+            f"max_hours: {prepr_game_stats.max_hours} ({type(prepr_game_stats.max_hours)}) "
+            f"and league_position: {league_position} ({type(league_position)}) "
+            f"and participants: {prepr_game_stats.count_league_participants} "
+            f"({type(prepr_game_stats.count_league_participants)})"
+        )
+        config.watcher.logger.trace(
+            f"Weighted_hours * (hours/max hours): {config.game.weighted_hours_g1} * "
+            f"({hours / prepr_game_stats.max_hours} = {config.game.weighted_hours_g1 * (hours / prepr_game_stats.max_hours)})"
+        )
+        config.watcher.logger.trace("Weighted_league_pos * (1-((league_position-1)/(league_participants - 1))")
+        config.watcher.logger.trace(f"{config.game.weighted_league_pos_g1} * (1-(({league_position-1})/({prepr_game_stats.count_league_participants - 1}))")
+        config.watcher.logger.trace(
+            f"{config.game.weighted_league_pos_g1 * (1- (league_position - 1)) / (prepr_game_stats.count_league_participants - 1)}"
+        )
+
+        result = config.game.weighted_hours_g1 * (
+            hours / prepr_game_stats.max_hours
+        ) + config.game.weighted_league_pos_g1 * (
+            (1- (league_position - 1)) / (prepr_game_stats.count_league_participants - 1)
+        )
+        config.watcher.logger.trace(f"Exit get_player_rank with scor: {result}")
+        return result
+    except TypeError as err:
+        config.watcher.logger.error(f"TypeError in get_player_rank: {err}")
+        config.watcher.logger.error(
+            f"hours: {hours} ({type(hours)}) "
+            f"max_hours: {prepr_game_stats.max_hours} ({type(prepr_game_stats.max_hours)}) "
+            f"and league_position: {league_position} ({type(league_position)}) "
+            f"and participants: {prepr_game_stats.count_league_participants} "
+            f"({type(prepr_game_stats.count_league_participants)})"
+        )
+    except ValueError as err:
+        config.watcher.logger.error(f"ValueError in get_player_rank: {err}")
+        config.watcher.logger.error(f"Input hours: {hours} ({type(hours)})")

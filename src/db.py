@@ -364,7 +364,67 @@ async def get_random_tasks(config: Configuration, limit: int) -> list[Task]:
         list[Task]: Tasks from the database
     """
     async with config.db.session() as session:
-        return (await session.execute(select(Task).order_by(func.random()).limit(5))).scalars().all()
+        return (
+            (await session.execute(select(Task).order_by(func.random()).limit(limit)))
+            .scalars()
+            .all()
+        )
+
+
+async def get_tasks_based_on_ratin_1(config: Configuration, rating: int) -> list[Task]:
+    """
+    This function gets a list of tasks from the database based on the rating for game 1.
+    The rating is used to filter the tasks.
+
+    Args:
+        config (Configuration): App configuration
+        rating (int): rating to filter the tasks from 0 to 100
+
+    Returns:
+        list[Task]: Tasks from the database
+    """
+    async with config.db.session() as session:
+        for _ in range(6):
+            tasks = (
+                (
+                    await session.execute(
+                        select(Task)
+                        .filter(Task.rating <= rating)
+                        .order_by(Task.rating.desc())
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+            if len(tasks) >= 5:
+                return tasks
+            rating += 5
+    return []
+
+
+async def get_tasks_sort_hard(tasks: list[Task], number_of_tasks=5):
+    tasks.sort(key=lambda x: x.rating, reverse=True)
+    return tasks[:number_of_tasks]
+
+
+async def get_tasks_sort_soft(tasks: list[Task], number_of_tasks=5):
+    tasks.sort(key=lambda x: x.rating)
+    return tasks[:number_of_tasks]
+
+
+async def balanced_task_mix(tasks: list[Task], number_of_tasks=5) -> list[Task]:
+    """
+    This function creates a balanced task mix from the list of tasks.
+    The tasks are sorted by rating and the list is divided into equal parts.
+    There is one task from each of the different difficulty levels.
+
+    Returns:
+        list[Task]: Balanced task mix
+    """
+    tasks.sort(key=lambda x: x.rating)
+    step = len(tasks) // number_of_tasks
+    return [tasks[i * step] for i in range(number_of_tasks)]
 
 
 async def update_db_obj(config: Configuration, obj: Game | Player) -> None:

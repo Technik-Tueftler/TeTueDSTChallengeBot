@@ -29,12 +29,13 @@ async def onlyonce(config):
                 print(player.league.points)
                 # print(f"Player: {player.name}, League-Punkte: {player.league}")
         async with config.db.session() as session:
-            result = (await session.execute(select(func.count()).select_from(src.League))).scalar_one()
+            result = (
+                await session.execute(select(func.count()).select_from(src.League))
+            ).scalar_one()
             print(f"Anzahl Einträge: {result}")
             count_max_hours_tbl = (
                 await session.execute(select(func.max(src.Player.hours)))
             ).scalar_one_or_none()
-
 
         prepr_game_stats = src.GameStats()
         await prepr_game_stats.process_league_stats(config)
@@ -44,9 +45,27 @@ async def onlyonce(config):
             async with session.begin():
                 result = (await session.scalars(select(src.Player))).all()
             for player in result:
-                player_rank = await src.get_player_rank(config, player, prepr_game_stats)
+                player_rank = await src.get_player_rank(
+                    config, player, prepr_game_stats
+                )
                 print(f"Player: {player.name}, Rank: {player_rank}")
-        
+                all_tasks = await src.get_tasks_based_on_ratin_1(config, player_rank*100)
+                if all_tasks:
+                    tasks = await src.get_tasks_sort_hard(all_tasks)
+                    for task in tasks:
+                        print(f"Task: {task.name}, Difficulty: {task.rating}")
+                    
+
+            # tasks = (
+            #     (
+            #         await session.execute(
+            #             select(src.Task).filter(src.Task.rating <= (player_rank * 100)).order_by(src.Task.rating.desc())
+            #         )
+            #     )
+            #     .scalars()
+            #     .all()
+            # )
+            
 
     except Exception as e:
         print("Error in main function:", e)
@@ -196,10 +215,11 @@ async def main():
     config.db.initialize_db()
     await src.sync_db(config.db.engine)
     src.watcher.logger.info(f"Start application in version: {src.__version__}")
+    # await src.generate_league_table(config) TODO: activate for release
     discord_bot = src.DiscordBot(config)
-    tasks = [discord_bot.start(), src.generate_league_table(config)]
+    tasks = [discord_bot.start()]
     # tasks.append(background_task())
-    # tasks.append(onlyonce(config))
+    tasks.append(onlyonce(config))
     await asyncio.gather(*tasks)
 
 

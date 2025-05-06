@@ -19,6 +19,7 @@ from .db import (
     League,
     Rank,
     get_player,
+    get_tasks_based_on_ratin_1
 )
 
 positions_game_1 = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
@@ -176,11 +177,8 @@ async def create_quests(
             # Player: timdeutschland, Rank: 0.11999999999999997 -> 12 / 5 Aufgaben -> 3P/Aufgabe
             # Player: irrelady, Rank: 0.0
 
-            tasks = (
-                (await session.execute(select(Task).order_by(func.random()).limit(5)))
-                .scalars()
-                .all()
-            )
+            tasks = get_tasks_based_on_ratin_1(config, player_rank)
+
             for i, task in enumerate(tasks, start=1):
                 quest = Quest(
                     start_time=datetime.now(),
@@ -279,28 +277,13 @@ async def get_player_rank(
         if not await prepr_game_stats.rank_calculation_possible():
             return 0.0
 
-        # TODO: trace logging in extra Funktion auslagern?
-        config.watcher.logger.trace(
-            f"hours: {hours} ({type(hours)}) "
-            f"max_hours: {prepr_game_stats.max_hours} ({type(prepr_game_stats.max_hours)}) "
-            f"and league_position: {league_position} ({type(league_position)}) "
-            f"and participants: {prepr_game_stats.count_league_participants} "
-            f"({type(prepr_game_stats.count_league_participants)})"
-        )
-        config.watcher.logger.trace(
-            f"Weighted_hours * (hours/max hours): {config.game.weighted_hours_g1} * "
-            f"({hours / prepr_game_stats.max_hours} = {config.game.weighted_hours_g1 * (hours / prepr_game_stats.max_hours)})"
-        )
-        config.watcher.logger.trace("Weighted_league_pos * (1-((league_position-1)/(league_participants - 1))")
-        config.watcher.logger.trace(f"{config.game.weighted_league_pos_g1} * (1-(({league_position-1})/({prepr_game_stats.count_league_participants - 1}))")
-        config.watcher.logger.trace(
-            f"{config.game.weighted_league_pos_g1 * (1- (league_position - 1)) / (prepr_game_stats.count_league_participants - 1)}"
-        )
+        # TODO: traceing hinzufügen?
 
         result = config.game.weighted_hours_g1 * (
             hours / prepr_game_stats.max_hours
         ) + config.game.weighted_league_pos_g1 * (
-            (1- (league_position - 1)) / (prepr_game_stats.count_league_participants - 1)
+            1
+            - ((league_position - 1) / (prepr_game_stats.count_league_participants - 1))
         )
         config.watcher.logger.trace(f"Exit get_player_rank with scor: {result}")
         return result

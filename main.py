@@ -48,10 +48,11 @@ async def onlyonce(config):
                 player_rank = await src.get_player_rank(
                     config, player, prepr_game_stats
                 )
+                print(20*"#")
                 print(f"Player: {player.name}, Rank: {player_rank}")
                 all_tasks = await src.get_tasks_based_on_ratin_1(config, player_rank*100)
                 if all_tasks:
-                    tasks = await src.get_tasks_sort_hard(all_tasks)
+                    tasks = await src.balanced_task_mix_random(all_tasks)
                     for task in tasks:
                         print(f"Task: {task.name}, Difficulty: {task.rating}")
                     

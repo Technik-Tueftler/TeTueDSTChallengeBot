@@ -1,5 +1,6 @@
 """All database related functions are here."""
 
+import random
 from enum import Enum
 from datetime import datetime
 from sqlalchemy import ForeignKey, func
@@ -425,6 +426,47 @@ async def balanced_task_mix(tasks: list[Task], number_of_tasks=5) -> list[Task]:
     tasks.sort(key=lambda x: x.rating)
     step = len(tasks) // number_of_tasks
     return [tasks[i * step] for i in range(number_of_tasks)]
+
+
+async def balanced_task_mix_random(tasks: list[Task]) -> list[Task]:
+    """
+    This function creates a balanced random task mix from the list of tasks.
+    The tasks are sorted by rating and the list is divided into equal parts.
+    There is one task from each of the different difficulty levels.
+
+    Returns:
+        list[Task]: Balanced task mix
+    """
+    try:
+        sorted_tasks = [[] for _ in range(5)]
+        random_tasks = []
+        for task in tasks:
+            if task.rating < 20:
+                sorted_tasks[0].append(task)
+            elif task.rating < 40:
+                sorted_tasks[1].append(task)
+            elif task.rating < 60:
+                sorted_tasks[2].append(task)
+            elif task.rating < 80:
+                sorted_tasks[3].append(task)
+            else:
+                sorted_tasks[4].append(task)
+        list_counter = 1
+        for separated_tasks in reversed(sorted_tasks):
+            if not separated_tasks:
+                list_counter += 1
+                continue
+            for _ in range(list_counter):
+                temp_task = random.choice(separated_tasks)
+                random_tasks.append(temp_task)
+                list_counter -= 1
+                if list_counter == 0:
+                    list_counter = 1
+                    break
+        return random_tasks
+    except Exception as e:
+        print(e)
+        return []
 
 
 async def update_db_obj(config: Configuration, obj: Game | Player) -> None:

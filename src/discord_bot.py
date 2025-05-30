@@ -12,6 +12,7 @@ from .configuration import Configuration
 from .game import positions_game_1, initialize_game_1
 from .discord_setup_game import setup_game
 from .file_utils import import_tasks, export_tasks
+from .game_1 import practice_game1
 
 
 class PlayerLevelInput(
@@ -60,7 +61,9 @@ class PlayerLevelInput(
             )
             self.stop()
         except AttributeError as err:
-            self.config.watcher.logger.error(f"Error during on_submit in PlayerLevelInput: {err}")
+            self.config.watcher.logger.error(
+                f"Error during on_submit in PlayerLevelInput: {err}"
+            )
 
 
 class UserSelectView(discord.ui.View):
@@ -212,6 +215,9 @@ class DiscordBot:
         async def wrapped_game1_command(interaction: discord.Interaction):
             await game1(interaction, self.config)
 
+        async def wrapped_practice_game1_command(interaction: discord.Interaction):
+            await practice_game1(interaction, self.config)
+
         async def wrapped_setup_game(interaction: discord.Interaction):
             await setup_game(interaction, self.config)
 
@@ -223,9 +229,19 @@ class DiscordBot:
 
         self.bot.tree.command(
             name="fast_and_hungry_task_hunt",
-            description="Complete all tasks and survive. The game ends as soon as one "
-            "player has completed all tasks",
+            description=(
+                "Complete all tasks and survive. The game ends as "
+                "soon as one player has completed all tasks"
+            ),
         )(wrapped_game1_command)
+
+        self.bot.tree.command(
+            name="prac_fast_and_hungry_task_hunt",
+            description=(
+                "Practice the game 'Fast and hungry, "
+                "task hunt' with a user selection menu."
+            ),
+        )(wrapped_practice_game1_command)
 
         self.bot.tree.command(
             name="setup_game",

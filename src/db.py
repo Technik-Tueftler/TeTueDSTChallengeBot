@@ -2,6 +2,8 @@
 
 import random
 from enum import Enum
+from typing import Set
+import asyncio
 from datetime import datetime
 from sqlalchemy import ForeignKey, func
 from sqlalchemy import Enum as AlchemyEnum
@@ -352,7 +354,9 @@ async def get_changeable_games(config: Configuration) -> list[Game]:
     return games
 
 
-async def get_random_tasks(config: Configuration, limit: int) -> list[Task]:
+async def get_random_tasks(
+    config: Configuration, limit: int, rating_min: int = 0, rating_max: int = 100
+) -> list[Task]:
     """
     This function gets a list of random tasks from the database.
     The number of tasks is limited by the limit parameter.
@@ -366,13 +370,21 @@ async def get_random_tasks(config: Configuration, limit: int) -> list[Task]:
     """
     async with config.db.session() as session:
         return (
-            (await session.execute(select(Task).order_by(func.random()).limit(limit)))
+            (
+                await session.execute(
+                    select(Task)
+                    .where(Task.rating >= rating_min)
+                    .where(Task.rating < rating_max)
+                    .order_by(func.random())
+                    .limit(limit)
+                )
+            )
             .scalars()
             .all()
         )
 
 
-async def get_tasks_based_on_ratin_1(config: Configuration, rating: int) -> list[Task]:
+async def get_tasks_based_on_rating_1(config: Configuration, rating: int) -> list[Task]:
     """
     This function gets a list of tasks from the database based on the rating for game 1.
     The rating is used to filter the tasks.
@@ -428,7 +440,9 @@ async def balanced_task_mix(tasks: list[Task], number_of_tasks=5) -> list[Task]:
     return [tasks[i * step] for i in range(number_of_tasks)]
 
 
-async def balanced_task_mix_random(tasks: list[Task]) -> list[Task]:
+async def balanced_task_mix_random(
+    tasks: list[Task], exclude_ids: Set[int], exclude_lock: asyncio.Lock
+) -> list[Task]:
     """
     This function creates a balanced random task mix from the list of tasks.
     The tasks are sorted by rating and the list is divided into equal parts.
@@ -439,31 +453,29 @@ async def balanced_task_mix_random(tasks: list[Task]) -> list[Task]:
     """
     try:
         sorted_tasks = [[] for _ in range(5)]
-        random_tasks = []
         for task in tasks:
-            if task.rating < 20:
-                sorted_tasks[0].append(task)
-            elif task.rating < 40:
-                sorted_tasks[1].append(task)
-            elif task.rating < 60:
-                sorted_tasks[2].append(task)
-            elif task.rating < 80:
-                sorted_tasks[3].append(task)
-            else:
-                sorted_tasks[4].append(task)
+            group = min(task.rating // 20, 4)
+            sorted_tasks[group].append(task)
+
         list_counter = 1
-        for separated_tasks in reversed(sorted_tasks):
-            if not separated_tasks:
+        selected_task = []
+
+        for grouped_tasks in reversed(sorted_tasks):
+            if not grouped_tasks:
                 list_counter += 1
                 continue
-            for _ in range(list_counter):
-                temp_task = random.choice(separated_tasks)
-                random_tasks.append(temp_task)
-                list_counter -= 1
-                if list_counter == 0:
-                    list_counter = 1
-                    break
-        return random_tasks
+            async with exclude_lock:
+                filtered_tasks = [t for t in grouped_tasks if t.id not in exclude_ids]
+            n = min(list_counter, len(filtered_tasks))
+            selected_task.extend(random.sample(filtered_tasks, n))
+            async with exclude_lock:
+                exclude_ids.update(t.id for t in selected_task if t.once)
+                print(f"Excluded Tasks: {exclude_ids}")
+            list_counter -= n
+            if list_counter <= 0:
+                list_counter = 1
+
+        return selected_task
     except Exception as e:
         print(e)
         return []

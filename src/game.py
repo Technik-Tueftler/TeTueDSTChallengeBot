@@ -19,7 +19,7 @@ from .db import (
     League,
     Rank,
     get_player,
-    get_tasks_based_on_ratin_1
+    get_tasks_based_on_rating_1
 )
 
 positions_game_1 = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
@@ -177,7 +177,7 @@ async def create_quests(
             # Player: timdeutschland, Rank: 0.11999999999999997 -> 12 / 5 Aufgaben -> 3P/Aufgabe
             # Player: irrelady, Rank: 0.0
 
-            tasks = get_tasks_based_on_ratin_1(config, player_rank)
+            tasks = get_tasks_based_on_rating_1(config, player_rank)
 
             for i, task in enumerate(tasks, start=1):
                 quest = Quest(

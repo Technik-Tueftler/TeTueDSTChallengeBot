@@ -163,6 +163,19 @@ class Items(Base):
     def __repr__(self) -> str:
         return f"Name: {self.name!r}, rate:{self.rating!r})"
 
+class Exercise(Base):
+    """
+    Exercise table
+
+    Args:
+        Base (_type_): Basic class that is inherited
+    """
+    __tablename__ = "exercises"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(nullable=False)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"))
+    player_id: Mapped[int] = mapped_column(ForeignKey("players.id"))
+
 
 class Quest(Base):
     """Quests table
@@ -355,7 +368,7 @@ async def get_changeable_games(config: Configuration) -> list[Game]:
 
 
 async def get_random_tasks(
-    config: Configuration, limit: int, rating_min: int = 0, rating_max: int = 100
+    config: Configuration, limit: int, rating_min: int = 0, rating_max: int = 101
 ) -> list[Task]:
     """
     This function gets a list of random tasks from the database.
@@ -481,7 +494,7 @@ async def balanced_task_mix_random(
         return []
 
 
-async def update_db_obj(config: Configuration, obj: Game | Player) -> None:
+async def update_db_obj(config: Configuration, obj: Game | Player | Exercise) -> None:
     """
     Function to update a game or player object in the database
 

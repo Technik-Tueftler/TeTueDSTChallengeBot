@@ -1,11 +1,12 @@
 """
 Module for handling the 'Fast and hungry, task hunt' game.
 """
-
+from datetime import datetime
 import discord
 from discord import Interaction
 from .configuration import Configuration
-from .db import get_random_tasks
+from .db import Player, Exercise
+from .db import get_random_tasks, process_player, update_db_obj
 
 
 class GameDifficultyInput(discord.ui.View):
@@ -19,7 +20,7 @@ class GameDifficultyInput(discord.ui.View):
         min_values=1,
         max_values=1,
         options=[
-            discord.SelectOption(label="Beginner", value="beginner"),
+            discord.SelectOption(label="Beginner ()", value="beginner"),
             discord.SelectOption(label="Easy", value="easy"),
             discord.SelectOption(label="Medium", value="medium"),
             discord.SelectOption(label="Hard", value="hard"),
@@ -53,28 +54,45 @@ async def practice_game1(interaction: Interaction, config: Configuration):
             ephemeral=True,
         )
         await difficulty_select.wait()
-        rating = 0
+        rating_min = 0
+        rating_max = 100
         match difficulty_select.difficulty:
             case "beginner":
-                rating = 20
+                rating_min = 0
+                rating_max = 19
             case "easy":
-                rating = 40
+                rating_min = 20
+                rating_max = 39
             case "medium":
-                rating = 60
+                rating_min = 40
+                rating_max = 59
             case "hard":
-                rating = 80
+                rating_min = 60
+                rating_max = 79
             case _:
-                rating = 100
+                rating_min = 80
+                rating_max = 101
 
-        task = await get_random_tasks(
+        task = (await get_random_tasks(
             config,
             1,
-            rating_min=rating - 20,
-            rating_max=rating - 1,
+            rating_min=rating_min,
+            rating_max=rating_max,
+        ))[0]
+        player = (await process_player(
+            config,
+            (Player(dc_id=interaction.user.id, name=interaction.user.name, hours=0),),
+        ))[0]
+        await update_db_obj(
+            config,
+            Exercise(
+                timestamp = datetime.now(),
+                task_id = task.id,
+                player_id = player.id
+            ),
         )
-        dc_user = interaction.user
-        await dc_user.send(
-            f"Hello {dc_user.display_name}, you selected the difficulty: "
+        await interaction.user.send(
+            f"Hello {player.name}, you selected the difficulty: "
             f"{difficulty_select.difficulty}. "
-            f"Your task for practice is: \n{task[0].name}: {task[0].description}"
+            f"Your task for practice is: \n{task.name}: {task.description}"
         )

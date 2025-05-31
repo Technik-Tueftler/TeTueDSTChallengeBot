@@ -4,7 +4,7 @@ Load environment variables and validation of project configurations from user
 import re
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, ConfigDict
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncEngine
 from .tetue_generic.generic_requests import GenReqConfiguration
 from .tetue_generic.watcher import WatcherConfiguration
@@ -34,6 +34,7 @@ class DbConfiguration(BaseModel):
     db_url: str = None
     engine: AsyncEngine = None
     session: async_sessionmaker = None
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def initialize_db(self):
         """
@@ -42,12 +43,6 @@ class DbConfiguration(BaseModel):
         self.engine = create_async_engine(self.db_url)
         self.session = async_sessionmaker(bind=self.engine, expire_on_commit=False)
 
-    class Config:
-        """
-        Pydantic configuration class to define that all types are allowed
-        """
-
-        arbitrary_types_allowed = True
 
     @field_validator("db_url")
     @classmethod

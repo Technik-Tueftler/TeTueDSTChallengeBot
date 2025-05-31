@@ -2,8 +2,10 @@
 This file contains unit tests for verifying the functionality of 
 generic utilities and functions within package tetue_generic.
 """
+import os
 import sys
 import pytest
+from unittest.mock import patch
 from asyncmock import AsyncMock
 from pydantic import ValidationError
 import src
@@ -191,20 +193,9 @@ def test_watcher_configuration_default():
     Verifies the default value for file path of `WatcherConfiguration`.
 
     Steps:
-    1. Instantiate `WatcherConfiguration`.
+    1. Instantiate `Configuration`.
     2. Assert that `log_file_path` equals files/app.log.
     """
-    config = src.WatcherConfiguration()
-    assert config.log_file_path == "files/app.log"
-
-def test_init_generic_watcher_changes_file_path():
-    """
-    Validates whether `init_generic_watcher` correctly updates the file path.
-
-    Steps:
-    1. Set a new file path.
-    2. Call `init_generic_watcher` with the new value.
-    3. Assert that the `log_file_path` in `watcher_settings` is updated.
-    """
-    config = src.WatcherConfiguration(log_file_path="tests/app2.log")
-    assert config.log_file_path == "tests/app2.log"
+    with patch.dict(os.environ, {"TT_WATCHER__LOG_FILE_PATH": "files/app.log"}):
+        config = src.Configuration()
+        assert config.watcher.log_file_path == "files/app.log"

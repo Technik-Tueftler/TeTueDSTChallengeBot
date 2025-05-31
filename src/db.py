@@ -99,7 +99,12 @@ class League(Base):
     player: Mapped[Player] = relationship("Player", back_populates="league")
 
     def __repr__(self) -> str:
-        return f"Player: {self.player_id!r} / Place: {self.id!r} / points:{self.points!r} / survived:{self.survived!r})"
+        return (
+            f"Player: {self.player_id!r} / "
+            f"Place: {self.id!r} / "
+            f"points:{self.points!r} / "
+            f"survived:{self.survived!r})"
+        )
 
 
 class Rank(Base):
@@ -163,6 +168,7 @@ class Items(Base):
     def __repr__(self) -> str:
         return f"Name: {self.name!r}, rate:{self.rating!r})"
 
+
 class Exercise(Base):
     """
     Exercise table
@@ -170,6 +176,7 @@ class Exercise(Base):
     Args:
         Base (_type_): Basic class that is inherited
     """
+
     __tablename__ = "exercises"
     id: Mapped[int] = mapped_column(primary_key=True)
     timestamp: Mapped[datetime] = mapped_column(nullable=False)
@@ -429,12 +436,32 @@ async def get_tasks_based_on_rating_1(config: Configuration, rating: int) -> lis
     return []
 
 
-async def get_tasks_sort_hard(tasks: list[Task], number_of_tasks=5):
+async def get_tasks_sort_hard(tasks: list[Task], number_of_tasks=5) -> list[Task]:
+    """
+    Get the top tasks based on their rating sorted by hardness (highest rating first).
+
+    Args:
+        tasks (list[Task]): List of Task objects to sort.
+        number_of_tasks (int, optional): Number of tasks to return. Defaults to 5.
+
+    Returns:
+        list[Task]: Sorted list of Task objects, limited to the specified number of tasks.
+    """
     tasks.sort(key=lambda x: x.rating, reverse=True)
     return tasks[:number_of_tasks]
 
 
-async def get_tasks_sort_soft(tasks: list[Task], number_of_tasks=5):
+async def get_tasks_sort_soft(tasks: list[Task], number_of_tasks=5) -> list[Task]:
+    """
+    Get the top tasks based on their rating sorted by hardness (lowest rating first).
+
+    Args:
+        tasks (list[Task]): List of Task objects to sort.
+        number_of_tasks (int, optional): Number of tasks to return. Defaults to 5.
+
+    Returns:
+        list[Task]: Sorted list of Task objects, limited to the specified number of tasks.
+    """
     tasks.sort(key=lambda x: x.rating)
     return tasks[:number_of_tasks]
 

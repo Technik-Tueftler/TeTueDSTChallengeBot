@@ -1,11 +1,10 @@
-"""All functions and features for logging the app
-"""
+"""All functions and features for logging the app"""
 
 import sys
 from functools import partialmethod
 import loguru
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class WatcherConfiguration(BaseModel):
@@ -16,13 +15,7 @@ class WatcherConfiguration(BaseModel):
     log_level: str = ""
     log_file_path: str = ""
     logger: loguru._logger.Logger = None
-
-    class Config:
-        """
-        Pydantic configuration class to define that all types are allowed
-        """
-
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 def init_logging(config) -> None:
@@ -34,6 +27,8 @@ def init_logging(config) -> None:
     logger.remove()
     logger.level("EXTDEBUG", no=9, color="<bold><yellow>")
     logger.__class__.extdebug = partialmethod(logger.__class__.log, "EXTDEBUG")
-    logger.add(config.watcher.log_file_path, rotation="500 MB", level=config.watcher.log_level)
+    logger.add(
+        config.watcher.log_file_path, rotation="500 MB", level=config.watcher.log_level
+    )
     logger.add(sys.stdout, colorize=True, level=config.watcher.log_level)
     config.watcher.logger = logger

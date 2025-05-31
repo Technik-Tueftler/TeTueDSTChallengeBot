@@ -6,7 +6,6 @@ and enables
 - The initialization of submodules and packages.
 - The import and provision of frequently used functions and constants.
 """
-from sqlalchemy.future import select
 from .configuration import *
 from .db import *
 from .discord_bot import *

@@ -1,5 +1,7 @@
 {
     "code-runner.cwd": "${workspaceFolder}/src",
     "terminal.integrated.cwd": "${workspaceFolder}/src",
-    "code-runner.fileDirectoryAsCwd": true
+    "code-runner.fileDirectoryAsCwd": true,
+    "liveServer.settings.port": 5501,
+    "python.analysis.typeCheckingMode": "off"
 }

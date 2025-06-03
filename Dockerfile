@@ -8,7 +8,7 @@ COPY requirements.txt ./
 RUN pip install -r requirements.txt
 
 COPY files/ ./files/
-COPY source/ ./source/
+COPY src/ ./src/
 
 ENV PYTHONPATH "${PYTHONPATH}:/user/app/TeTueDSTChallengeBot"
 

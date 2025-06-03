@@ -9,6 +9,8 @@ RUN pip install -r requirements.txt
 
 COPY files/ ./files/
 COPY src/ ./src/
+COPY main.py ./
+COPY default.env ./
 
 ENV PYTHONPATH "${PYTHONPATH}:/user/app/TeTueDSTChallengeBot"
 

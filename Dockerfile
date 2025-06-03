@@ -12,6 +12,6 @@ COPY src/ ./src/
 
 ENV PYTHONPATH "${PYTHONPATH}:/user/app/TeTueDSTChallengeBot"
 
-WORKDIR /user/app/TeTueDSTChallengeBot/source/
+WORKDIR /user/app/TeTueDSTChallengeBot/src/
 
 CMD ["python", "-u", "main.py"]

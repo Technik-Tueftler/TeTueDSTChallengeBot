@@ -18,3 +18,5 @@ if os.path.exists(file_path):
     if not os.path.exists(new_file_path):
         with open(new_file_path, 'w', encoding='utf-8') as f:
             f.write("")
+
+GENERIC_REQUEST_TIMEOUT_THR = 10

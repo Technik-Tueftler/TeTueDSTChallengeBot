@@ -1,4 +1,4 @@
-FROM FROM python:3.13-slim
+FROM python:3.13-slim
 
 ENV WORKING_DIR /user/app/TeTueDSTChallengeBot
 WORKDIR $WORKING_DIR

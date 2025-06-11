@@ -481,7 +481,7 @@ async def balanced_task_mix(tasks: list[Task], number_of_tasks=5) -> list[Task]:
 
 
 async def balanced_task_mix_random(
-    tasks: list[Task], exclude_ids: Set[int], exclude_lock: asyncio.Lock
+    tasks: list[Task], exclude_ids: Set[int]
 ) -> list[Task]:
     """
     This function creates a balanced random task mix from the list of tasks.
@@ -504,13 +504,10 @@ async def balanced_task_mix_random(
             if not grouped_tasks:
                 list_counter += 1
                 continue
-            async with exclude_lock:
-                filtered_tasks = [t for t in grouped_tasks if t.id not in exclude_ids]
+            filtered_tasks = [t for t in grouped_tasks if t.id not in exclude_ids]
             n = min(list_counter, len(filtered_tasks))
             selected_task.extend(random.sample(filtered_tasks, n))
-            async with exclude_lock:
-                exclude_ids.update(t.id for t in selected_task if t.once)
-                print(f"Excluded Tasks: {exclude_ids}")
+            exclude_ids.update(t.id for t in selected_task if t.once)
             list_counter -= n
             if list_counter <= 0:
                 list_counter = 1

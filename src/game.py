@@ -2,6 +2,7 @@
 This file contains all logic for creating a game and managing the game state.
 """
 
+import asyncio
 from datetime import datetime
 from collections import defaultdict
 from discord import Interaction, errors
@@ -19,7 +20,8 @@ from .db import (
     League,
     Rank,
     get_player,
-    get_tasks_based_on_rating_1
+    get_tasks_based_on_rating_1,
+    balanced_task_mix_random
 )
 
 positions_game_1 = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
@@ -92,11 +94,11 @@ async def initialize_game_1(
     """
     try:
         game_statistics = GameStats()
-        config.watcher.logger.debug(game_statistics)
         await game_statistics.process_league_stats(config)
-        config.watcher.logger.debug(game_statistics)
-        # TODO: eventuell mit dem kleinsten Spieler anfangen?
         players.sort(key=lambda x: x.hours, reverse=True)
+        config.watcher.logger.debug(game_statistics)
+        exclude_ids = set()
+        exclude_lock = asyncio.Lock()
         for player in players:
             dc_user = await interaction.guild.fetch_member(player.dc_id)
             if dc_user is None:
@@ -105,13 +107,26 @@ async def initialize_game_1(
                 )
                 await stop_game(config, game)
                 break
-            tasks = await create_quests(config, player, game, game_statistics)
-            if not tasks:
+            player_rank = await get_player_rank(config, player, game_statistics)
+            rated_tasks = await get_tasks_based_on_rating_1(config, player_rank*100)
+            if not rated_tasks:
                 config.watcher.logger.error(
-                    f"No tasks found for player: {player.name}."
+                    f"No tasks found for player rating {player_rank}: {player.name}."
                 )
                 await stop_game(config, game)
                 break
+            async with exclude_lock:
+                tasks = await balanced_task_mix_random(rated_tasks, exclude_ids)
+                config.watcher.logger.debug(
+                    f"Tasks for player {player.name}: {[task.name for task in tasks]}")
+                config.watcher.logger.debug(f"Exclude IDs: {exclude_ids}")
+            if not tasks:
+                config.watcher.logger.error(
+                    f"No tasks found for player with Algo-Balanced: {player.name}."
+                )
+                await stop_game(config, game)
+                break
+            await create_quests(config, player, game, tasks)
             await dc_user.send(
                 f"Hello {dc_user.name}, you are now in the game "
                 f'"{game.name}". You have to complete the following quests:\n'
@@ -132,65 +147,38 @@ async def initialize_game_1(
 
 
 async def create_quests(
-    config: Configuration, player: Player, game: Game, prepr_game_stats: GameStats
-) -> list[Task]:
+    config: Configuration, player: Player, game: Game, tasks: list[Task]
+) -> None:
     """
     Function to get the quests for a player based on the playing hours.
 
     Args:
         config (Configuration): App configuration
         player (Player): Player object to get quests for
-
-    Returns:
-        list[Task]: List of Task for the player
     """
-    async with config.db.session() as session:
-        async with session.begin():
-            game_player_association = (
-                await session.execute(
-                    select(GamePlayerAssociation).where(
-                        GamePlayerAssociation.game_id == game.id,
-                        GamePlayerAssociation.player_id == player.id,
+    try:
+        async with config.db.session() as session:
+            async with session.begin():
+                game_player_association = (
+                    await session.execute(
+                        select(GamePlayerAssociation).where(
+                            GamePlayerAssociation.game_id == game.id,
+                            GamePlayerAssociation.player_id == player.id,
+                        )
                     )
-                )
-            ).scalar_one_or_none()
-            # query=session.query(Table); idx=random.randint(0, query.count()); return query[idx]
-            # lst=list(range(count+1));random.shuffle(lst);return lst[:5] wäre mein Ansatz.
-            # Also am ende return [query[x] for x in lst[:5]]
+                ).scalar_one_or_none()
 
-            # erstelle tasks abhängig vom level (def get_player_level)
-            # def get_player_level_to_task_rating(player) -> task_rating
-            # (1) hole ich möglichen task die vom level passen? ja -> Ich hole alle Tasks >= task_rating
-            # if task only once:
-            # (2) task prüfen ob schon in benutzung: abfrage db bei quest game_player_association.id und task.id
-            # outer join quest + task.id und auf once prüfen (1 + 2 in eine query)
-            # (3) quest aus task erstellen und eintragen
-
-            player_rank = await get_player_rank(config, player, prepr_game_stats)
-
-            # Player: MAX, Rank 1.00 -> 100 / 5 Aufgaben -> 20P/Aufgabe
-            # Player: technik_tueftler, Rank: 0.88 -> 88 / 5 Aufgaben -> 18P/Aufgabe
-            # Player: tetues_helferlein, Rank: 0.7849999999999999
-            # Player: deyril, Rank: 0.6
-            # Player: hausi__, Rank: 0.36
-            # Player: marshel2708, Rank: 0.24
-            # Player: timdeutschland, Rank: 0.11999999999999997 -> 12 / 5 Aufgaben -> 3P/Aufgabe
-            # Player: irrelady, Rank: 0.0
-
-            tasks = get_tasks_based_on_rating_1(config, player_rank)
-
-            for i, task in enumerate(tasks, start=1):
-                quest = Quest(
-                    start_time=datetime.now(),
-                    status="running",
-                    task_id=task.id,
-                    position=i,
-                    game_player_association_id=game_player_association.id,
-                )
-                print(f"Quest: {quest.position} / Task: {task.name}")
-                session.add(quest)
-    return tasks
-
+                for i, task in enumerate(tasks, start=1):
+                    quest = Quest(
+                        start_time=datetime.now(),
+                        status="running",
+                        task_id=task.id,
+                        position=i,
+                        game_player_association_id=game_player_association.id,
+                    )
+                    session.add(quest)
+    except Exception as err:
+        print(err)
 
 async def generate_league_table(config: Configuration) -> None:
     """

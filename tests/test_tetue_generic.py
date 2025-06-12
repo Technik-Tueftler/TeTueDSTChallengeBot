@@ -204,8 +204,11 @@ def test_watcher_configuration_default():
     2. Assert that `log_file_path` equals files/app.log.
     """
     with patch.dict(
-        os.environ,
-        {"TT_WATCHER__LOG_FILE_PATH": "files/app.log"},  # pylint: disable=no-member
+        os.environ,  # pylint: disable=no-member
+        {
+            "TT_WATCHER__LOG_FILE_PATH": "files/app.log",
+            "TT_DC__token": "test_token",
+        },
     ):
         config = src.Configuration()
         assert config.watcher.log_file_path == "files/app.log"

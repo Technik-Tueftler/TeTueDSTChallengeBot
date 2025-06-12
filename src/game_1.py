@@ -13,6 +13,9 @@ from .db import get_random_tasks, process_player, update_db_obj, create_game
 
 
 class GameDifficultyInput(discord.ui.View):
+    """
+    Input view for selecting the difficulty level of the game.
+    """
     def __init__(self, config: Configuration):
         super().__init__(timeout=60)
         self.difficulty = None

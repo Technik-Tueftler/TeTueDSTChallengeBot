@@ -2,6 +2,7 @@
 Load environment variables and validation of project configurations from user
 """
 import re
+# from typing import List, Optional
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import BaseModel, field_validator, ConfigDict
@@ -71,6 +72,8 @@ class DiscordBotConfiguration(BaseModel):
     """
 
     token: str
+    # TT_DC__channel_id_g1=[1234,5678]
+    # channel_id_g1: Optional[List[int]]
 
 
 class Configuration(BaseSettings):

@@ -3,7 +3,6 @@
 import random
 from enum import Enum
 from typing import Set
-import asyncio
 from datetime import datetime
 from sqlalchemy import ForeignKey, func
 from sqlalchemy import Enum as AlchemyEnum
@@ -395,7 +394,7 @@ async def get_random_tasks(
                     select(Task)
                     .where(Task.rating >= rating_min)
                     .where(Task.rating < rating_max)
-                    .order_by(func.random())
+                    .order_by(func.random())  # pylint: disable=not-callable
                     .limit(limit)
                 )
             )
@@ -481,7 +480,7 @@ async def balanced_task_mix(tasks: list[Task], number_of_tasks=5) -> list[Task]:
 
 
 async def balanced_task_mix_random(
-    tasks: list[Task], exclude_ids: Set[int]
+    config: Configuration, tasks: list[Task], exclude_ids: Set[int]
 ) -> list[Task]:
     """
     This function creates a balanced random task mix from the list of tasks.
@@ -506,15 +505,19 @@ async def balanced_task_mix_random(
                 continue
             filtered_tasks = [t for t in grouped_tasks if t.id not in exclude_ids]
             n = min(list_counter, len(filtered_tasks))
-            selected_task.extend(random.sample(filtered_tasks, n))
+            selected_task.extend(
+                random.sample(filtered_tasks, n) # pylint: disable=no-member
+            )
             exclude_ids.update(t.id for t in selected_task if t.once)
             list_counter -= n
             if list_counter <= 0:
                 list_counter = 1
 
         return selected_task
-    except Exception as e:
-        print(e)
+    except (TypeError, AttributeError, ValueError, IndexError, KeyError) as err:
+        config.watcher.logger.error(
+            f"{str(err)}", exc_info=True
+        )
         return []
 
 

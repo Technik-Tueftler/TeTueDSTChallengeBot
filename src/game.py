@@ -8,6 +8,13 @@ from collections import defaultdict
 from discord import Interaction, errors
 from sqlalchemy import func, delete
 from sqlalchemy.future import select
+from sqlalchemy.exc import (
+    SQLAlchemyError,
+    IntegrityError,
+    OperationalError,
+    DBAPIError,
+    StatementError,
+)
 from .configuration import Configuration
 from .db import (
     Player,
@@ -21,7 +28,7 @@ from .db import (
     Rank,
     get_player,
     get_tasks_based_on_rating_1,
-    balanced_task_mix_random
+    balanced_task_mix_random,
 )
 
 positions_game_1 = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
@@ -40,11 +47,22 @@ class GameStats:
         return f"Gamestats: {str(self.max_hours)}"
 
     async def process_league_stats(self, config: Configuration):
+        """
+        Function to process the league statistics and calculate the number of participants
+        and the maximum hours played by a player.
+
+        Args:
+            config (Configuration): App configuration
+        """
         try:
             async with config.db.session() as session:
                 async with session.begin():
                     count_league_participants = (
-                        await session.execute(select(func.count()).select_from(League))
+                        await session.execute(
+                            select(func.count()).select_from( # pylint: disable=not-callable
+                                League
+                            )
+                        )
                     ).scalar_one_or_none()
                     max_hours = (
                         await session.execute(select(func.max(Player.hours)))
@@ -53,8 +71,21 @@ class GameStats:
                         self.count_league_participants = count_league_participants
                     if max_hours:
                         self.max_hours = max_hours
-        except Exception as err:
-            print(f"Error processing league stats: {err}")
+        except (
+            SQLAlchemyError,
+            DBAPIError,
+            OperationalError,
+            StatementError,
+        ) as db_err:
+            config.watcher.logger.error(
+                f"Database error processing league stats: {db_err}"
+            )
+        except asyncio.CancelledError:
+            config.watcher.logger.error(
+                "Async operation was cancelled while processing league stats"
+            )
+        except (TypeError, ValueError) as err:
+            config.watcher.logger.error(f"Error processing league stats: {err}")
 
     async def rank_calculation_possible(self) -> bool:
         """
@@ -98,7 +129,7 @@ async def initialize_game_1(
         players.sort(key=lambda x: x.hours, reverse=True)
         config.watcher.logger.debug(game_statistics)
         exclude_ids = set()
-        exclude_lock = asyncio.Lock()
+        exclude_lock = asyncio.Lock()  # pylint: disable=not-callable
         for player in players:
             dc_user = await interaction.guild.fetch_member(player.dc_id)
             if dc_user is None:
@@ -108,7 +139,7 @@ async def initialize_game_1(
                 await stop_game(config, game)
                 break
             player_rank = await get_player_rank(config, player, game_statistics)
-            rated_tasks = await get_tasks_based_on_rating_1(config, player_rank*100)
+            rated_tasks = await get_tasks_based_on_rating_1(config, player_rank * 100)
             if not rated_tasks:
                 config.watcher.logger.error(
                     f"No tasks found for player rating {player_rank}: {player.name}."
@@ -116,9 +147,10 @@ async def initialize_game_1(
                 await stop_game(config, game)
                 break
             async with exclude_lock:
-                tasks = await balanced_task_mix_random(rated_tasks, exclude_ids)
+                tasks = await balanced_task_mix_random(config, rated_tasks, exclude_ids)
                 config.watcher.logger.debug(
-                    f"Tasks for player {player.name}: {[task.name for task in tasks]}")
+                    f"Tasks for player {player.name}: {[task.name for task in tasks]}"
+                )
                 config.watcher.logger.debug(f"Exclude IDs: {exclude_ids}")
             if not tasks:
                 config.watcher.logger.error(
@@ -177,8 +209,19 @@ async def create_quests(
                         game_player_association_id=game_player_association.id,
                     )
                     session.add(quest)
-    except Exception as err:
-        print(err)
+    except (SQLAlchemyError, IntegrityError, OperationalError) as db_err:
+        config.watcher.logger.error(
+            f"Database error while creating quests for player {player.name}: {db_err}"
+        )
+    except asyncio.CancelledError:
+        config.watcher.logger.error(
+            f"Async operation was cancelled while creating quests for player {player.name}"
+        )
+    except (AttributeError, TypeError, ValueError) as err:
+        config.watcher.logger.error(
+            f"Error creating quests for player {player.name}: {err}"
+        )
+
 
 async def generate_league_table(config: Configuration) -> None:
     """
@@ -264,8 +307,6 @@ async def get_player_rank(
             league_position = league_position_tbl.id
         if not await prepr_game_stats.rank_calculation_possible():
             return 0.0
-
-        # TODO: traceing hinzufügen?
 
         result = config.game.weighted_hours_g1 * (
             hours / prepr_game_stats.max_hours

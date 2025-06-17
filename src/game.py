@@ -59,9 +59,9 @@ class GameStats:
                 async with session.begin():
                     count_league_participants = (
                         await session.execute(
-                            select(func.count()).select_from( # pylint: disable=not-callable
-                                League
-                            )
+                            select(
+                                func.count()  # pylint: disable=not-callable
+                            ).select_from(League)
                         )
                     ).scalar_one_or_none()
                     max_hours = (
@@ -308,12 +308,30 @@ async def get_player_rank(
         if not await prepr_game_stats.rank_calculation_possible():
             return 0.0
 
-        result = config.game.weighted_hours_g1 * (
+        game_score = config.game.weighted_hours_g1 * (
             hours / prepr_game_stats.max_hours
-        ) + config.game.weighted_league_pos_g1 * (
-            1
-            - ((league_position - 1) / (prepr_game_stats.count_league_participants - 1))
         )
+        config.watcher.logger.trace(
+            f"{config.game.weighted_hours_g1} * ({hours} / "
+            f"{prepr_game_stats.max_hours}) = {game_score}"
+        )
+        if league_position < 1:
+            league_score = 0.0
+        else:
+            league_score = config.game.weighted_league_pos_g1 * (
+                1
+                - (
+                    (league_position - 1)
+                    / (prepr_game_stats.count_league_participants - 1)
+                )
+            )
+        config.watcher.logger.trace(
+            f"{config.game.weighted_league_pos_g1} * (1 - (({league_position} - 1) / "
+            f"({prepr_game_stats.count_league_participants} - 1)) = {league_score}"
+        )
+        result = game_score + league_score
+        config.watcher.logger.trace(f"Game score: {game_score}")
+        config.watcher.logger.trace(f"League score: {league_score}")
         config.watcher.logger.trace(f"Exit get_player_rank with scor: {result}")
         return result
     except TypeError as err:

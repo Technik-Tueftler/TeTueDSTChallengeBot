@@ -55,6 +55,9 @@ class DiscordBot:
 
         async def wrapped_game1_command(interaction: discord.Interaction):
             await game1(interaction, self.config)
+        
+        # async def wrapped_game1_evaluate(interaction: discord.Interaction):
+        #     await game1_evaluate(interaction, self.config)
 
         async def wrapped_practice_game1_command(interaction: discord.Interaction):
             await practice_game1(interaction, self.config)
@@ -75,6 +78,14 @@ class DiscordBot:
                 "soon as one player has completed all tasks"
             ),
         )(wrapped_game1_command)
+
+        # self.bot.tree.command(
+        #     name="evaluate_fast_and_hungry_task_hunt",
+        #     description=(
+        #         "Evaluate the game 'Fast and hungry, task hunt'. "
+        #         "Check all reaktions and calculate the winner."
+        #     ),
+        # )(wrapped_game1_evaluate)
 
         self.bot.tree.command(
             name="prac_fast_and_hungry_task_hunt",

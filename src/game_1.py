@@ -264,6 +264,14 @@ async def game1(interaction: discord.Interaction, config: Configuration):
         game.message_id = message.id
         await update_db_obj(config, game)
 
+# async def game1_evaluate(interaction: discord.Interaction, config: Configuration):
+#     games = await get_changeable_games(config)
+#     select_view = GameSelectView(config, games)
+#     await interaction.response.send_message(
+#         "Which game would you like to change the status of?",
+#         view=select_view,
+#         ephemeral=True,
+#     )
         # await send_player_tasks(config, player, game)
 
         # try:

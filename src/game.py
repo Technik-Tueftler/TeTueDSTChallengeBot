@@ -176,12 +176,13 @@ async def initialize_game_1(
         else:
             return True
         return False
-    except errors.Forbidden as err:
+    except errors.HTTPException as err:
         config.watcher.logger.error(
             f"Error sending message to user {player.name} with dc_id: {player.dc_id}. "
             f"Error: {err}"
         )
         await stop_game(config, game)
+        return False
 
 
 async def create_quests(

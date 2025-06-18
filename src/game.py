@@ -111,7 +111,11 @@ async def stop_game(config: Configuration, game: Game) -> None:
 
 
 async def initialize_game_1(
-    config: Configuration, interaction: Interaction, game: Game, players: list[Player]
+    config: Configuration,
+    interaction: Interaction,
+    game: Game,
+    players: list[Player],
+    main_task: Task,
 ) -> bool:
     """
     Function to initialize the game and send a message to all players with the
@@ -122,6 +126,7 @@ async def initialize_game_1(
         interaction (Interaction): Interaction object to get the guild
         game (Game): Game object to get the game id
         players (list[Player]): List of players to get the player ids and send messages with quests
+        main_task (Task): Main task for all player in game 1
     """
     try:
         game_statistics = GameStats()
@@ -158,6 +163,7 @@ async def initialize_game_1(
                 )
                 await stop_game(config, game)
                 break
+            tasks.append(main_task)
             await create_quests(config, player, game, tasks)
             await dc_user.send(
                 f"Hello {dc_user.name}, you are now in the game "

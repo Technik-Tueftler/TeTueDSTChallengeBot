@@ -403,6 +403,27 @@ async def get_random_tasks(
         )
 
 
+async def get_main_task(config: Configuration) -> Task:
+    """
+    Funktion to get a random main task from the database for game 1
+
+    Args:
+        config (Configuration): App configuration
+
+    Returns:
+        Task: main task
+    """
+    async with config.db.session() as session:
+        return (
+            await session.execute(
+                select(Task)
+                .where(Task.type == "main")
+                .order_by(func.random())  # pylint: disable=not-callable
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+
 async def get_tasks_based_on_rating_1(config: Configuration, rating: int) -> list[Task]:
     """
     This function gets a list of tasks from the database based on the rating for game 1.
@@ -506,7 +527,7 @@ async def balanced_task_mix_random(
             filtered_tasks = [t for t in grouped_tasks if t.id not in exclude_ids]
             n = min(list_counter, len(filtered_tasks))
             selected_task.extend(
-                random.sample(filtered_tasks, n) # pylint: disable=no-member
+                random.sample(filtered_tasks, n)  # pylint: disable=no-member
             )
             exclude_ids.update(t.id for t in selected_task if t.once)
             list_counter -= n
@@ -515,9 +536,7 @@ async def balanced_task_mix_random(
 
         return selected_task
     except (TypeError, AttributeError, ValueError, IndexError, KeyError) as err:
-        config.watcher.logger.error(
-            f"{str(err)}", exc_info=True
-        )
+        config.watcher.logger.error(f"{str(err)}", exc_info=True)
         return []
 
 

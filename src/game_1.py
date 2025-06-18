@@ -9,7 +9,7 @@ from discord import Interaction, errors
 from .game import positions_game_1, initialize_game_1
 from .configuration import Configuration
 from .db import Player, Exercise
-from .db import get_random_tasks, process_player, update_db_obj, create_game
+from .db import get_random_tasks, process_player, update_db_obj, create_game, get_main_task
 
 
 class GameDifficultyInput(discord.ui.View):
@@ -230,14 +230,12 @@ async def game1(interaction: discord.Interaction, config: Configuration):
         config.watcher.logger.trace(
             f"Selected players: {[player.name for player in user_view.player_list]}")
         players = await process_player(config, user_view.player_list)
-        config.watcher.logger.trace(
-            f"Processed players: {[player.name for player in players]}"
-        )
         game = await create_game(config, "Fast and hungry, task hunt", players)
+        main_task = await get_main_task(config)
         config.watcher.logger.trace(
-            f"Created game with ID: {game.id}"
+            f"Created game with ID: {game.id} and main task: {main_task.name}"
         )
-        success = await initialize_game_1(config, interaction, game, players)
+        success = await initialize_game_1(config, interaction, game, players, main_task)
         config.watcher.logger.trace(
             f"Game initialization success: {success}"
         )

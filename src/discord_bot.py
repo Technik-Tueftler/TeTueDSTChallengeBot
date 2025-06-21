@@ -8,6 +8,7 @@ from discord.ext import commands
 from .discord_setup_game import setup_game
 from .file_utils import import_tasks, export_tasks
 from .game_1 import practice_game1, game1
+# from .game import show_league_table
 
 
 class DiscordBot:
@@ -55,7 +56,7 @@ class DiscordBot:
 
         async def wrapped_game1_command(interaction: discord.Interaction):
             await game1(interaction, self.config)
-        
+
         # async def wrapped_game1_evaluate(interaction: discord.Interaction):
         #     await game1_evaluate(interaction, self.config)
 
@@ -64,6 +65,9 @@ class DiscordBot:
 
         async def wrapped_setup_game(interaction: discord.Interaction):
             await setup_game(interaction, self.config)
+
+        # async def wrapped_show_league_table(interaction: discord.Interaction):
+        #     await show_league_table(interaction, self.config)
 
         async def wrapped_import_tasks(interaction: discord.Interaction):
             await import_tasks(interaction, self.config)
@@ -99,6 +103,11 @@ class DiscordBot:
             name="setup_game",
             description="Switch game state to specific status like running, paused, finished, etc.",
         )(wrapped_setup_game)
+
+        # self.bot.tree.command(
+        #     name="show_league_table",
+        #     description="Show the current league table with all players and their scores.",
+        # )(wrapped_show_league_table)
 
         self.bot.tree.command(
             name="import_tasks",

@@ -272,18 +272,18 @@ async def game1(interaction: discord.Interaction, config: Configuration):
 #         view=select_view,
 #         ephemeral=True,
 #     )
-        # await send_player_tasks(config, player, game)
+#         await send_player_tasks(config, player, game)
 
-        # try:
-        #     # Über die Nachrichten ID die Nachricht abrufen
-        #     new_message = await interaction.channel.fetch_message(int(message.id))
-        #     # Über die Nachricht ID die Reaktionen abrufen
-        #     for reaction in new_message.reactions:
-        #         emoji = reaction.emoji
-        #         count = reaction.count
-        #         users = [user async for user in reaction.users()]
-        #         print(
-        #             f"Emoji: {emoji}, Anzahl: {count}, Benutzer: {[user.name for user in users]}"
-        #         )
-        # except Exception as e:
-        #     print(f"Error fetching message: {e}")
+#         try:
+#             # Über die Nachrichten ID die Nachricht abrufen
+#             new_message = await interaction.channel.fetch_message(int(message.id))
+#             # Über die Nachricht ID die Reaktionen abrufen
+#             for reaction in new_message.reactions:
+#                 emoji = reaction.emoji
+#                 count = reaction.count
+#                 users = [user async for user in reaction.users()]
+#                 print(
+#                     f"Emoji: {emoji}, Anzahl: {count}, Benutzer: {[user.name for user in users]}"
+#                 )
+#         except Exception as e:
+#             print(f"Error fetching message: {e}")

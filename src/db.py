@@ -443,6 +443,7 @@ async def get_tasks_based_on_rating_1(config: Configuration, rating: int) -> lis
                     await session.execute(
                         select(Task)
                         .filter(Task.rating <= rating)
+                        .filter(Task.type == "task")
                         .order_by(Task.rating.desc())
                     )
                 )

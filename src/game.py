@@ -32,7 +32,8 @@ from .db import (
 )
 
 positions_game_1 = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
-# league_positions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"]
+league_positions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", 
+                    "6️⃣", "7️⃣", "8️⃣", "9️⃣"] # TODO: add mor postions >HEX<
 
 
 class GameStats:
@@ -283,45 +284,48 @@ async def generate_league_table(config: Configuration) -> None:
     config.watcher.logger.info("League table generated")
 
 
-# async def show_league_table(
-#     interaction: Interaction, config: Configuration
-# ) -> None:
-#     """
-#     Function to show the league table in the Discord channel.
+async def show_league_table(interaction: Interaction, config: Configuration) -> None:
+    """
+    Function to show the league table in the Discord channel.
 
-#     Args:
-#         interaction (Interaction): Interaction object to respond to the command
-#         config (Configuration): App configuration
-#     """
-#     try:
-#         async with config.db.session() as session:
-#             async with session.begin():
-#                 league_table = (
-#                     await session.execute(
-#                         select(League).order_by(League.points.desc())
-#                     )
-#                 ).scalars().all()
+    Args:
+        interaction (Interaction): Interaction object to respond to the command
+        config (Configuration): App configuration
+    """
+    try:
+        async with config.db.session() as session:
+            async with session.begin():
+                league_table = (
+                    (
+                        await session.execute(
+                            select(League).order_by(League.points.desc())
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                if not league_table:
+                    await interaction.response.send_message(
+                        "No players found in the league table."
+                    )
+                    return
 
-#         if not league_table:
-#             await interaction.response.send_message(
-#                 "No players found in the league table."
-#             )
-#             return
+                table_lines = [
+                    f"{league_positions[i]} {league.player.name} - "
+                    f"Points: {league.points}, Survived: {league.survived}"
+                    for i, league in enumerate(league_table[:len(league_positions)])
+                ]
+        response_message = "\n".join(table_lines)
 
-#         table_lines = [
-#             f"{league_positions[i]} {league.player.name} - "
-#             f"Points: {league.points}, Survived: {league.survived}"
-#             for i, league in enumerate(league_table)
-#         ]
-#         response_message = "\n".join(table_lines)
-
-#         await interaction.response.send_message(response_message)
-#     except SQLAlchemyError as db_err:
-#         config.watcher.logger.error(f"Database error while showing league table: {db_err}")
-#         await interaction.response.send_message("Error retrieving league table.")
-#     except errors.HTTPException as http_err:
-#         config.watcher.logger.error(f"HTTP error while sending message: {http_err}")
-#         await interaction.response.send_message("Error sending league table message.")
+        await interaction.response.send_message(response_message)
+    except SQLAlchemyError as db_err:
+        config.watcher.logger.error(
+            f"Database error while showing league table: {db_err}"
+        )
+        await interaction.response.send_message("Error retrieving league table.")
+    except errors.HTTPException as http_err:
+        config.watcher.logger.error(f"HTTP error while sending message: {http_err}")
+        await interaction.response.send_message("Error sending league table message.")
 
 
 async def get_player_rank(

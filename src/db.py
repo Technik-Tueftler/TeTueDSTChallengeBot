@@ -95,7 +95,7 @@ class League(Base):
     points: Mapped[int] = mapped_column(nullable=False)
     player_id: Mapped[int] = mapped_column(ForeignKey("players.id"))
     survived: Mapped[int] = mapped_column(nullable=False)
-    player: Mapped[Player] = relationship("Player", back_populates="league")
+    player: Mapped[Player] = relationship("Player", back_populates="league", lazy="joined")
 
     def __repr__(self) -> str:
         return (

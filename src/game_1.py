@@ -1,15 +1,15 @@
 """
 Module for handling the 'Fast and hungry, task hunt' game.
 """
-
+import asyncio
 from typing import List
 from datetime import datetime
 import discord
 from discord import Interaction, errors
 from .game import positions_game_1, initialize_game_1
 from .configuration import Configuration
-from .db import Player, Exercise
-from .db import get_random_tasks, process_player, update_db_obj, create_game, get_main_task
+from .db import Player, Exercise, GameStatus, Game
+from .db import get_random_tasks, process_player, update_db_obj, create_game, get_main_task, get_games_w_status, get_game_from_id
 
 
 class GameDifficultyInput(discord.ui.View):
@@ -45,6 +45,81 @@ class GameDifficultyInput(discord.ui.View):
             ephemeral=True,
         )
         self.stop()
+
+
+class ConfirmationView(discord.ui.View):
+    """
+    ConfirmationView class to create a confirmation view for the user.
+    This view is used to confirm the game setup.
+    """
+
+    def __init__(self, config: Configuration, game: Game):
+        super().__init__(timeout=60)
+        self.game = game
+        self.config = config
+
+    @discord.ui.button(label="Im sure!", style=discord.ButtonStyle.danger)
+    async def button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """
+        Callback function for the confirm button.
+        """
+        try:
+            await asyncio.sleep(2)
+            await interaction.response.edit_message(
+                content=f"Evaluation of the game with ID: {self.game.id} is finished. Game status is also set to finished.",
+                view=None
+            )
+            self.stop()
+        except Exception as err:
+            print(err)
+
+
+
+class GameSelect(discord.ui.Select):
+    """
+    GameSelect class to create a input menu to select the target game. Here
+    the input is built dynamically with the possible games that can be changed.
+    """
+
+    def __init__(self, config, games):
+        self.config = config
+        options = [
+            discord.SelectOption(
+                label=f"{game.id}: {game.timestamp.strftime('%Y-%m-%d')}",
+                value=str(game.id),
+                emoji=game.status.icon,
+                description=f"{game.name}",
+            )
+            for game in games
+        ]
+        super().__init__(
+            placeholder="Select a game...",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        try:
+            game = await get_game_from_id(self.config, self.values[0])
+            confirmation_view = ConfirmationView(self.config, game)
+            await interaction.response.edit_message(
+                            content=f"You are sure to evaluate and finish the game with ID: {game.id}? This is not reversible!",
+                            view=confirmation_view
+                        )
+        except AttributeError as err:
+            self.config.watcher.logger.error(f"Attribute error during callback: {err}")
+
+
+class GameSelectView(discord.ui.View):
+    """
+    GameSelectView class to create a view for the user to select the
+    target game to change the status.
+    """
+
+    def __init__(self, config, games):
+        super().__init__()
+        self.add_item(GameSelect(config, games))
 
 
 async def practice_game1(interaction: Interaction, config: Configuration):
@@ -264,26 +339,26 @@ async def game1(interaction: discord.Interaction, config: Configuration):
         game.message_id = message.id
         await update_db_obj(config, game)
 
-# async def game1_evaluate(interaction: discord.Interaction, config: Configuration):
-#     games = await get_changeable_games(config)
-#     select_view = GameSelectView(config, games)
-#     await interaction.response.send_message(
-#         "Which game would you like to change the status of?",
-#         view=select_view,
-#         ephemeral=True,
-#     )
-#         await send_player_tasks(config, player, game)
 
-#         try:
-#             # Über die Nachrichten ID die Nachricht abrufen
-#             new_message = await interaction.channel.fetch_message(int(message.id))
-#             # Über die Nachricht ID die Reaktionen abrufen
-#             for reaction in new_message.reactions:
-#                 emoji = reaction.emoji
-#                 count = reaction.count
-#                 users = [user async for user in reaction.users()]
-#                 print(
-#                     f"Emoji: {emoji}, Anzahl: {count}, Benutzer: {[user.name for user in users]}"
-#                 )
-#         except Exception as e:
-#             print(f"Error fetching message: {e}")
+async def game1_evaluate(interaction: discord.Interaction, config: Configuration):
+    games = await get_games_w_status(config, [GameStatus.STOPPED])
+    select_view = GameSelectView(config, games)
+    await interaction.response.send_message(
+        "Which game would you like to evaluate and finish?",
+        view=select_view,
+        ephemeral=True,
+    )
+
+        # try:
+        #     # Über die Nachrichten ID die Nachricht abrufen
+        #     new_message = await interaction.channel.fetch_message(int(message.id))
+        #     # Über die Nachricht ID die Reaktionen abrufen
+        #     for reaction in new_message.reactions:
+        #         emoji = reaction.emoji
+        #         count = reaction.count
+        #         users = [user async for user in reaction.users()]
+        #         print(
+        #             f"Emoji: {emoji}, Anzahl: {count}, Benutzer: {[user.name for user in users]}"
+        #         )
+        # except Exception as e:
+        #     print(f"Error fetching message: {e}")

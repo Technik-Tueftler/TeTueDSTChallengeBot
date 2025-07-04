@@ -5,7 +5,7 @@ The workflow is started via a command.
 
 import discord
 from .configuration import Configuration
-from .db import get_changeable_games, GameStatus, get_game_from_id, update_db_obj
+from .db import get_games_w_status, GameStatus, get_game_from_id, update_db_obj
 
 
 class StatusSelect(discord.ui.Select):
@@ -136,7 +136,14 @@ async def setup_game(interaction: discord.Interaction, config: Configuration):
         interaction (discord.Interaction): Interaction object to get the guild
         config (Configuration): App configuration
     """
-    games = await get_changeable_games(config)
+    games = await get_games_w_status(
+        config,
+        [
+            GameStatus.CREATED,
+            GameStatus.RUNNING,
+            GameStatus.PAUSED,
+        ],
+    )
     select_view = GameSelectView(config, games)
     await interaction.response.send_message(
         "Which game would you like to change the status of?",

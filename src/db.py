@@ -340,7 +340,7 @@ async def create_game(config, game_name: str, player: list[Player]) -> Game:
         config.watcher.logger.error(f"Database error: {str(err)}", exc_info=True)
 
 
-async def get_changeable_games(config: Configuration) -> list[Game]:
+async def get_games_w_status(config: Configuration, status: list[GameStatus]) -> list[Game]:
     """
     This function get all changeable games back. Games that have the status
     CREATED, RUNNING or PAUSED can be changed.
@@ -357,13 +357,7 @@ async def get_changeable_games(config: Configuration) -> list[Game]:
                 (
                     await session.execute(
                         select(Game).where(
-                            Game.status.in_(
-                                [
-                                    GameStatus.CREATED,
-                                    GameStatus.RUNNING,
-                                    GameStatus.PAUSED,
-                                ]
-                            )
+                            Game.status.in_(status)
                         )
                     )
                 )

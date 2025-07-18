@@ -2,6 +2,7 @@
 This module contains the discord bot implementation with definitions for the bot and its commands.
 The bot is implemented using the discord.py library and provides a simple command to test the bot.
 """
+
 import discord
 from discord.ext import commands, tasks
 from .discord_setup_game import setup_game
@@ -22,13 +23,20 @@ class DiscordBot:
         self.config = config
         intents = discord.Intents.default()
         intents.members = True
+        intents.message_content = True
+        intents.reactions = True
         self.bot = commands.Bot(command_prefix="!", intents=intents)
 
         @self.bot.event
         async def on_ready():
             await self.on_ready()
 
+        @self.bot.event
+        async def on_reaction_add(reaction, user):
+            await schedule_reaction_tracker(self.config, reaction, user)
+
         self.register_commands()
+
 
     async def start(self):
         """
@@ -123,7 +131,8 @@ class DiscordBot:
 
     @tasks.loop(seconds=10)
     async def reaction_tracker(self):
-        schedule_reaction_tracker(self.config)
+        # await schedule_reaction_tracker(self.bot, self.config)
+        ...
 
     @reaction_tracker.before_loop
     async def init_reaction_tracker(self):

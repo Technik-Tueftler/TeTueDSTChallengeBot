@@ -13,6 +13,15 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from .configuration import Configuration
 
 
+class ReactionStatus(Enum):
+    """Enum for reaction status"""
+    NEW: int = 0
+    DELETED_STATUS: int = 1
+    DELETED_PLAYER: int = 2
+    REGISTERED: int = 3
+    SUPPORTER: int = 4
+
+
 class GameStatus(Enum):
     """Enum for game status"""
 
@@ -141,6 +150,7 @@ class Game(Base):
     playing_days: Mapped[int] = mapped_column(default=70)
     timestamp: Mapped[datetime] = mapped_column(nullable=False)
     message_id: Mapped[str] = mapped_column(nullable=True)
+    channel_id: Mapped[str] = mapped_column(nullable=True)
     players = relationship("GamePlayerAssociation", back_populates="game")
 
     def __repr__(self) -> str:
@@ -229,6 +239,23 @@ class Task(Base):
 
     def __repr__(self) -> str:
         return f"Name: {self.name!r}, rate:{self.rating!r})"
+
+class Reaction(Base):
+    """Reaction table
+
+    Args:
+        Base (_type_): Basic class that is inherited
+    """
+
+    __tablename__ = "reactions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    dc_id: Mapped[str] = mapped_column(nullable=False)
+    status: Mapped[ReactionStatus] = mapped_column(
+        AlchemyEnum(ReactionStatus), default=ReactionStatus.NEW
+    )
+    timestamp: Mapped[datetime] = mapped_column(nullable=False)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id"))
+
 
 
 async def get_player(config, player_id: int) -> Player | None:

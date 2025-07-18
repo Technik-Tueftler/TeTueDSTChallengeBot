@@ -2,13 +2,13 @@
 This module contains the discord bot implementation with definitions for the bot and its commands.
 The bot is implemented using the discord.py library and provides a simple command to test the bot.
 """
-
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from .discord_setup_game import setup_game
 from .file_utils import import_tasks, export_tasks
 from .game_1 import practice_game1, game1, game1_evaluate
 from .game import show_league_table
+from .reaction_tracker import schedule_reaction_tracker
 
 
 class DiscordBot:
@@ -41,12 +41,14 @@ class DiscordBot:
         """
         Event function to print a message when the bot is online.
         """
-        print(f"{self.bot.user} ist online")
+        self.config.watcher.logger.info(f"{self.bot.user} ist online")
         synced = await self.bot.tree.sync()
-        print(f"Slash Commands synchronisiert: {len(synced)}")
+        self.config.watcher.logger.info(f"Slash Commands synchronisiert: {len(synced)}")
         await self.bot.change_presence(
             status=discord.Status.online, activity=discord.Game("Don't Starve Together")
         )
+        self.config.watcher.logger.info("start reaction tracker")
+        self.reaction_tracker.start()
 
     def register_commands(self):
         """
@@ -118,3 +120,11 @@ class DiscordBot:
             name="export_tasks",
             description="Export current tasks from database to an Excel spreadsheet.",
         )(wrapped_export_tasks)
+
+    @tasks.loop(seconds=10)
+    async def reaction_tracker(self):
+        schedule_reaction_tracker(self.config)
+
+    @reaction_tracker.before_loop
+    async def init_reaction_tracker(self):
+        await self.bot.wait_until_ready()

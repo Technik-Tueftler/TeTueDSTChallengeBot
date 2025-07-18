@@ -2,6 +2,7 @@
 Load environment variables and validation of project configurations from user
 """
 import re
+import asyncio
 # from typing import List, Optional
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -35,6 +36,7 @@ class DbConfiguration(BaseModel):
     db_url: str = None
     engine: AsyncEngine = None
     session: async_sessionmaker = None
+    write_lock: asyncio.locks.Lock = asyncio.Lock()  # pylint: disable=not-callable
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def initialize_db(self):

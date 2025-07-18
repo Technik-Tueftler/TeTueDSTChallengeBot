@@ -275,22 +275,24 @@ async def generate_league_table(config: Configuration) -> None:
         reverse=True,
     )
 
-    async with config.db.session() as session:
-        async with session.begin():
-            await session.execute(delete(League))
-            for player_id, value in sorted_players:
-                player = await get_player(config, player_id)
-                session.add(
-                    League(
-                        player=player,
-                        points=value["total_points"],
-                        survived=value["total_survived"],
+    # TODO: In db.py verschieben
+    async with config.db.write_lock:
+        async with config.db.session() as session:
+            async with session.begin():
+                await session.execute(delete(League))
+                for player_id, value in sorted_players:
+                    player = await get_player(config, player_id)
+                    session.add(
+                        League(
+                            player=player,
+                            points=value["total_points"],
+                            survived=value["total_survived"],
+                        )
                     )
-                )
-                config.watcher.logger.debug(
-                    f"Player: {player.name}, Points: {value['total_points']}, "
-                    f"Survived: {value['total_survived']}"
-                )
+                    config.watcher.logger.debug(
+                        f"Player: {player.name}, Points: {value['total_points']}, "
+                        f"Survived: {value['total_survived']}"
+                    )
     config.watcher.logger.info("League table generated")
 
 

@@ -15,6 +15,7 @@ from .configuration import Configuration
 
 class ReactionStatus(Enum):
     """Enum for reaction status"""
+
     NEW: int = 0
     DELETED_STATUS: int = 1
     DELETED_PLAYER: int = 2
@@ -104,7 +105,9 @@ class League(Base):
     points: Mapped[int] = mapped_column(nullable=False)
     player_id: Mapped[int] = mapped_column(ForeignKey("players.id"))
     survived: Mapped[int] = mapped_column(nullable=False)
-    player: Mapped[Player] = relationship("Player", back_populates="league", lazy="joined")
+    player: Mapped[Player] = relationship(
+        "Player", back_populates="league", lazy="joined"
+    )
 
     def __repr__(self) -> str:
         return (
@@ -150,7 +153,7 @@ class Game(Base):
     playing_days: Mapped[int] = mapped_column(default=70)
     timestamp: Mapped[datetime] = mapped_column(nullable=False)
     message_id: Mapped[str] = mapped_column(nullable=True)
-    channel_id: Mapped[str] = mapped_column(nullable=True)
+    channel_id: Mapped[int] = mapped_column(nullable=True)
     players = relationship("GamePlayerAssociation", back_populates="game")
 
     def __repr__(self) -> str:
@@ -240,6 +243,7 @@ class Task(Base):
     def __repr__(self) -> str:
         return f"Name: {self.name!r}, rate:{self.rating!r})"
 
+
 class Reaction(Base):
     """Reaction table
 
@@ -255,7 +259,6 @@ class Reaction(Base):
     )
     timestamp: Mapped[datetime] = mapped_column(nullable=False)
     game_id: Mapped[int] = mapped_column(ForeignKey("games.id"))
-
 
 
 async def get_player(config, player_id: int) -> Player | None:
@@ -311,27 +314,28 @@ async def process_player(
         list[Player]: processed player list
     """
     processed_player_list = []
-    async with config.db.session() as session:
-        for p in player_list:
-            async with session.begin():
-                player = (
-                    await session.execute(
-                        select(Player).filter(Player.dc_id == p.dc_id)
-                    )
-                ).scalar_one_or_none()
-                if player is None:
-                    session.add(p)
-                    # Nicht benötigt da Transaktionsblock .begin() auto. mit commit beendet wird
-                    # await session.commit()
-                    processed_player_list.append(p)
-                    config.watcher.logger.info(
-                        f"Player {p.name} added to the database."
-                    )
-                else:
-                    if p.hours != 0:
-                        player.hours = p.hours
+    async with config.db.write_lock:
+        async with config.db.session() as session:
+            for p in player_list:
+                async with session.begin():
+                    player = (
+                        await session.execute(
+                            select(Player).filter(Player.dc_id == p.dc_id)
+                        )
+                    ).scalar_one_or_none()
+                    if player is None:
+                        session.add(p)
+                        # Nicht benötigt da Transaktionsblock .begin() auto. mit commit beendet wird
                         # await session.commit()
-                    processed_player_list.append(player)
+                        processed_player_list.append(p)
+                        config.watcher.logger.info(
+                            f"Player {p.name} added to the database."
+                        )
+                    else:
+                        if p.hours != 0:
+                            player.hours = p.hours
+                            # await session.commit()
+                        processed_player_list.append(player)
     return processed_player_list
 
 
@@ -348,26 +352,29 @@ async def create_game(config, game_name: str, player: list[Player]) -> Game:
         Game: Object of the created game for further processing
     """
     try:
-        async with config.db.session() as session:
-            async with session.begin():
-                game = Game(
-                    name=game_name,
-                    timestamp=datetime.now(),
-                )
-                session.add(game)
-                associations = [
-                    GamePlayerAssociation(game=game, player=p) for p in player
-                ]
-                session.add_all(associations)
-            await session.refresh(game)
-            return game
+        async with config.db.write_lock:
+            async with config.db.session() as session:
+                async with session.begin():
+                    game = Game(
+                        name=game_name,
+                        timestamp=datetime.now(),
+                    )
+                    session.add(game)
+                    associations = [
+                        GamePlayerAssociation(game=game, player=p) for p in player
+                    ]
+                    session.add_all(associations)
+                await session.refresh(game)
+                return game
     except IntegrityError as err:
         config.watcher.logger.error(f"Integrity error {str(err)}")
     except SQLAlchemyError as err:
         config.watcher.logger.error(f"Database error: {str(err)}", exc_info=True)
 
 
-async def get_games_w_status(config: Configuration, status: list[GameStatus]) -> list[Game]:
+async def get_games_w_status(
+    config: Configuration, status: list[GameStatus]
+) -> list[Game]:
     """
     This function get all changeable games back. Games that have the status
     CREATED, RUNNING or PAUSED can be changed.
@@ -381,17 +388,46 @@ async def get_games_w_status(config: Configuration, status: list[GameStatus]) ->
     async with config.db.session() as session:
         async with session.begin():
             games = (
-                (
-                    await session.execute(
-                        select(Game).where(
-                            Game.status.in_(status)
-                        )
-                    )
-                )
+                (await session.execute(select(Game).where(Game.status.in_(status))))
                 .scalars()
                 .all()
             )
     return games
+
+
+async def get_games_f_reaction(config: Configuration) -> list[Game] | None:
+    """
+    _summary_
+
+    Args:
+        config (Configuration): app configuration
+
+    Returns:
+        list[Game] | None: valid games to track reactions or None if no games found
+    """
+    try:
+        async with config.db.session() as session:
+            async with session.begin():
+                games = (
+                    (
+                        await session.execute(
+                            select(Game).where(
+                                Game.status.not_in(
+                                    [GameStatus.FINISHED, GameStatus.STOPPED]
+                                ),
+                                Game.channel_id.is_not(None),
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+        return games
+    except Exception as err:
+        config.watcher.logger.error(
+            f"Error while getting games for reaction: {str(err)}", exc_info=True
+        )
+        return []
 
 
 async def get_random_tasks(
@@ -570,9 +606,10 @@ async def update_db_obj(config: Configuration, obj: Game | Player | Exercise) ->
         config (_type_): configuration
         obj (Game | Player): Object to update in the database
     """
-    async with config.db.session() as session:
-        async with session.begin():
-            session.add(obj)
+    async with config.db.write_lock:
+        async with config.db.session() as session:
+            async with session.begin():
+                session.add(obj)
 
 
 async def sync_db(engine: AsyncEngine):

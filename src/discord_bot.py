@@ -32,8 +32,8 @@ class DiscordBot:
             await self.on_ready()
 
         @self.bot.event
-        async def on_reaction_add(reaction, user):
-            await schedule_reaction_tracker(self.config, reaction, user)
+        async def on_raw_reaction_add(payload):
+            await schedule_reaction_tracker(self.config, payload)
 
         self.register_commands()
 

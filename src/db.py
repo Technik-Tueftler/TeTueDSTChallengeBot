@@ -6,7 +6,13 @@ from typing import Set
 from datetime import datetime
 from sqlalchemy import ForeignKey, func
 from sqlalchemy import Enum as AlchemyEnum
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+    joinedload,
+)
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.future import select
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
@@ -596,6 +602,31 @@ async def balanced_task_mix_random(
     except (TypeError, AttributeError, ValueError, IndexError, KeyError) as err:
         config.watcher.logger.error(f"{str(err)}", exc_info=True)
         return []
+
+
+async def get_all_gameXplayer_from_message_id(
+    config: Configuration, message_id: int
+) -> list[Game]:
+    """
+    Function get all games based on message_id with join off all players in the game.
+
+    Args:
+        config (Configuration): App configuration
+        message_id (int): Message ID from Game
+
+    Returns:
+        list[Game]: All games with players based on message_id
+    """
+    async with config.db.session() as session:
+        async with session.begin():
+            result = await session.execute(
+                select(Game)
+                .options(
+                    joinedload(Game.players).joinedload(GamePlayerAssociation.player)
+                )
+                .where(Game.message_id == message_id)
+            )
+    return result.unique().scalars().all()
 
 
 async def update_db_obj(config: Configuration, obj: Game | Player | Exercise) -> None:

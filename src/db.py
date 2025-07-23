@@ -264,7 +264,13 @@ class Reaction(Base):
         AlchemyEnum(ReactionStatus), default=ReactionStatus.NEW
     )
     timestamp: Mapped[datetime] = mapped_column(nullable=False)
-    game_id: Mapped[int] = mapped_column(ForeignKey("games.id"))
+    message_id: Mapped[int] = mapped_column(nullable=False)
+    channel_id: Mapped[int] = mapped_column(nullable=False)
+    emoji: Mapped[str] = mapped_column(nullable=False)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id"), nullable=True)
+
+    def __repr__(self) -> str:
+        return f"ID: {self.id!r}, status:{self.status!r})"
 
 
 async def get_player(config, player_id: int) -> Player | None:
@@ -606,7 +612,7 @@ async def balanced_task_mix_random(
 
 async def get_all_gameXplayer_from_message_id(
     config: Configuration, message_id: int
-) -> list[Game]:
+) -> Game | None:
     """
     Function get all games based on message_id with join off all players in the game.
 
@@ -626,10 +632,10 @@ async def get_all_gameXplayer_from_message_id(
                 )
                 .where(Game.message_id == message_id)
             )
-    return result.unique().scalars().all()
+    # return result.unique().scalars().all()
+    return result.unique().scalar_one_or_none()
 
-
-async def update_db_obj(config: Configuration, obj: Game | Player | Exercise) -> None:
+async def update_db_obj(config: Configuration, obj: Game | Player | Exercise | Reaction) -> None:
     """
     Function to update a game or player object in the database
 
@@ -641,6 +647,20 @@ async def update_db_obj(config: Configuration, obj: Game | Player | Exercise) ->
         async with config.db.session() as session:
             async with session.begin():
                 session.add(obj)
+
+
+async def insert_db_obj(config: Configuration, obj: Reaction) -> Reaction:
+    try:
+        async with config.db.write_lock:
+            async with config.db.session() as session:
+                async with session.begin():
+                    session.add(obj)
+                await session.refresh(obj)
+                return obj
+    except IntegrityError as err:
+        config.watcher.logger.error(f"Integrity error {str(err)}")
+    except SQLAlchemyError as err:
+        config.watcher.logger.error(f"Database error: {str(err)}", exc_info=True)
 
 
 async def sync_db(engine: AsyncEngine):

@@ -31,6 +31,9 @@ from .db import (
     balanced_task_mix_random,
 )
 
+all_game_emoji = {
+    "Fast and hungry, task hunt": ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
+}
 positions_game_1 = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
 league_positions = [
     "1️⃣",

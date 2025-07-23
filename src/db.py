@@ -635,7 +635,24 @@ async def get_all_gameXplayer_from_message_id(
     # return result.unique().scalars().all()
     return result.unique().scalar_one_or_none()
 
-async def update_db_obj(config: Configuration, obj: Game | Player | Exercise | Reaction) -> None:
+
+async def get_all_db_obj_from_id(
+    config: Configuration, obj: Player, ids: list[int]
+) -> list[Player]:
+    try:
+        async with config.db.session() as session:
+            async with session.begin():
+                result = await session.execute(select(obj).where(obj.id.in_(ids)))
+        return result.scalars().all()
+    except Exception as err:
+        config.watcher.logger.error(
+            f"Error while getting objects from ID: {str(err)}", exc_info=True
+        )
+
+
+async def update_db_obj(
+    config: Configuration, obj: Game | Player | Exercise | Reaction
+) -> None:
     """
     Function to update a game or player object in the database
 

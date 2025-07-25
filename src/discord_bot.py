@@ -5,9 +5,9 @@ The bot is implemented using the discord.py library and provides a simple comman
 
 import discord
 from discord.ext import commands, tasks
-from .discord_setup_game import setup_game
+from .game_setup import setup_game, evaluate_game
 from .file_utils import import_tasks, export_tasks
-from .game_1 import practice_game1, game1, game1_evaluate
+from .game_1 import practice_game1, game1
 from .game import show_league_table
 from .reaction_tracker import schedule_reaction_tracker
 
@@ -69,8 +69,8 @@ class DiscordBot:
         async def wrapped_game1_command(interaction: discord.Interaction):
             await game1(interaction, self.config)
 
-        async def wrapped_game1_evaluate(interaction: discord.Interaction):
-            await game1_evaluate(interaction, self.config)
+        async def wrapped_evaluate_game(interaction: discord.Interaction):
+            await evaluate_game(interaction, self.config)
 
         async def wrapped_practice_game1_command(interaction: discord.Interaction):
             await practice_game1(interaction, self.config)
@@ -96,12 +96,11 @@ class DiscordBot:
         )(wrapped_game1_command)
 
         self.bot.tree.command(
-            name="evalu_fast_and_hungry_task_hunt",
+            name="evaluate_game",
             description=(
-                "Evaluate the game 'Fast and hungry, task hunt'. "
-                "Check all reaktions and calculate the winner."
+                "Evaluate the game, check all reaktions and calculate the winner."
             ),
-        )(wrapped_game1_evaluate)
+        )(wrapped_evaluate_game)
 
         self.bot.tree.command(
             name="prac_fast_and_hungry_task_hunt",

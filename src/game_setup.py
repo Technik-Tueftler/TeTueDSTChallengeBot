@@ -22,20 +22,22 @@ class StatusSelect(discord.ui.Select):
             options = [
                 discord.SelectOption(label="RUNNING", value="1"),
                 discord.SelectOption(label="PAUSE", value="2"),
-                discord.SelectOption(label="STOPPED", value="3"),
             ]
         elif game.status == GameStatus.RUNNING:
             options = [
                 discord.SelectOption(label="PAUSE", value="2"),
-                discord.SelectOption(label="STOPPED", value="3"),
-                discord.SelectOption(label="FINISHED", value="4"),
             ]
-        else:
+        elif game.status == GameStatus.PAUSED:
             options = [
                 discord.SelectOption(label="RUNNING", value="1"),
                 discord.SelectOption(label="STOPPED", value="3"),
-                discord.SelectOption(label="FINISHED", value="4"),
             ]
+        else:
+            options = []
+            config.watcher.logger.error(
+                f"Game with ID {game.id} is in status {game.status.name}, "
+                + "no status change possible."
+            )
         super().__init__(
             placeholder="Select the destination status...",
             min_values=1,
@@ -147,6 +149,24 @@ async def setup_game(interaction: discord.Interaction, config: Configuration):
     select_view = GameSelectView(config, games)
     await interaction.response.send_message(
         "Which game would you like to change the status of?",
+        view=select_view,
+        ephemeral=True,
+    )
+
+
+async def evaluate_game(interaction: discord.Interaction, config: Configuration):
+    """
+    Command function to evaluate and finish a game of 'Fast and hungry, task hunt'.
+    This function allows the user to select a game that has been evaluated and finished.
+
+    Args:
+        interaction (discord.Interaction): Interaction object from Discord
+        config (Configuration): App configuration
+    """
+    games = await get_games_w_status(config, [GameStatus.STOPPED])
+    select_view = GameSelectView(config, games)
+    await interaction.response.send_message(
+        "Which game would you like to evaluate and finish?",
         view=select_view,
         ephemeral=True,
     )

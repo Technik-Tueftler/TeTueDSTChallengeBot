@@ -10,14 +10,13 @@ from discord import Interaction, errors
 from .game import MissingGameConfig
 from .game import all_game_emoji, initialize_game_1
 from .configuration import Configuration
-from .db import Player, Exercise, GameStatus, Game
+from .db import Player, Exercise, Game
 from .db import (
     get_random_tasks,
     process_player,
     update_db_obj,
     create_game,
     get_main_task,
-    get_games_w_status,
     get_game_from_id,
 )
 
@@ -359,32 +358,3 @@ async def game1(interaction: discord.Interaction, config: Configuration):
             await update_db_obj(config, game)
     except MissingGameConfig as err:
         config.watcher.logger.error(f"Missing game configuration: {err}, game not started.")
-
-
-async def game1_evaluate(interaction: discord.Interaction, config: Configuration):
-    """
-    Command function to evaluate and finish a game of 'Fast and hungry, task hunt'.
-    This function allows the user to select a game that has been evaluated and finished.
-
-    Args:
-        interaction (discord.Interaction): Interaction object from Discord
-        config (Configuration): App configuration
-    """
-    games = await get_games_w_status(config, [GameStatus.STOPPED])
-    select_view = GameSelectView(config, games)
-    await interaction.response.send_message(
-        "Which game would you like to evaluate and finish?",
-        view=select_view,
-        ephemeral=True,
-    )
-
-    # channel = bot.get_channel(CHANNEL_ID)
-    # message = await channel.fetch_message(MESSAGE_ID)
-    # for reaction in message.reactions:
-    #     if str(reaction.emoji) not in positions_game_1:
-    #         async for user in reaction.users():
-    #             await message.remove_reaction(reaction.emoji, user)
-    #     else:
-    #         async for user in reaction.users():
-    #             if user.id not in ALLOWED_USER_IDS:
-    #                 await message.remove_reaction(reaction.emoji, user)

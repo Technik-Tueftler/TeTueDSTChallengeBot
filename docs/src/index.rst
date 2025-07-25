@@ -6,3 +6,6 @@ App
    :caption: Contents:
 
    discord_bot
+   game
+   db
+   reaction

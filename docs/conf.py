@@ -29,6 +29,7 @@ intersphinx_mapping = {
     'loguru': ('https://loguru.readthedocs.io/en/stable/', None),
     'requests': ('https://requests.readthedocs.io/en/latest/', None),
     'pydantic': ('https://docs.pydantic.dev/latest', None),
+    'sqlalchemy': ('https://docs.sqlalchemy.org/en/20/', None),
     }
 
 autodoc_member_order = 'bysource'
@@ -47,7 +48,6 @@ sphinxmermaid_mermaid_init = {
     'tertiaryColor': '#2196F3'
   }
 }
-
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output

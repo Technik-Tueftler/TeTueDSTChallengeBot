@@ -118,17 +118,18 @@ class GameStats:
         return self.count_league_participants > 0 and self.max_hours > 0
 
 
-async def stop_game(config: Configuration, game: Game) -> None:
+async def failed_game(config: Configuration, game: Game) -> None:
     """
-    Helper function to stop a game in case that a wrong input has been givin in selection menu.
+    Helper function to stop a game in case that a wrong input has been givin in selection menu
+    and set the game status to FAILURE.
 
     Args:
         config (Configuration): App configuration
         game (Game): Game object for change status
     """
-    game.status = GameStatus.STOPPED
+    game.status = GameStatus.FAILURE
     await update_db_obj(config, game)
-    config.watcher.logger.info(f"Game with ID: {game.id} was stopped.")
+    config.watcher.logger.info(f"Game with ID: {game.id} was set to failure because of an error.")
 
 
 async def initialize_game_1(
@@ -162,7 +163,7 @@ async def initialize_game_1(
                 config.logger.error(
                     f"User {player.name} not found in the guild with dc_id: {player.dc_id}."
                 )
-                await stop_game(config, game)
+                await failed_game(config, game)
                 break
             player_rank = await get_player_rank(config, player, game_statistics)
             rated_tasks = await get_tasks_based_on_rating_1(config, player_rank * 100)
@@ -170,7 +171,7 @@ async def initialize_game_1(
                 config.watcher.logger.error(
                     f"No tasks found for player rating {player_rank}: {player.name}."
                 )
-                await stop_game(config, game)
+                await failed_game(config, game)
                 break
             async with exclude_lock:
                 tasks = await balanced_task_mix_random(config, rated_tasks, exclude_ids)
@@ -182,7 +183,7 @@ async def initialize_game_1(
                 config.watcher.logger.error(
                     f"No tasks found for player with Algo-Balanced: {player.name}."
                 )
-                await stop_game(config, game)
+                await failed_game(config, game)
                 break
             tasks.append(main_task)
             await create_quests(config, player, game, tasks)
@@ -205,11 +206,11 @@ async def initialize_game_1(
             f"Error sending message to user {player.name} with dc_id: {player.dc_id}. "
             f"Error: {err}"
         )
-        await stop_game(config, game)
+        await failed_game(config, game)
         return False
     except MissingGameConfig as err:
         config.watcher.logger.error(f"Missing game configuration: {err}")
-        await stop_game(config, game)
+        await failed_game(config, game)
         return False
 
 

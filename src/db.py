@@ -38,6 +38,7 @@ class GameStatus(Enum):
     PAUSED: int = 2
     STOPPED: int = 3
     FINISHED: int = 4
+    FAILURE: int = 5
 
     @property
     def icon(self):

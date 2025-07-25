@@ -26,6 +26,23 @@ games
 +----------------------------+-------------+----------------------------------------------------------------------------------------------+
 
 
+game status workflow
+--------------------
+
+.. mermaid ::
+   flowchart TD
+    A([start]) -->|automatic| CREATED
+    CREATED --> |manuelly| RUNNING
+    CREATED --> |manuelly| PAUSED
+    CREATED --> |automatic| FAILURE
+    FAILURE --> |automatic| Z
+    RUNNING --> |manuelly| PAUSED
+    PAUSED --> |manuelly| RUNNING
+    PAUSED --> |manuelly| STOPPED
+    STOPPED --> |automatic| FINISHED
+    FINISHED --> Z([end])
+
+
 functions
 ------------------
 .. automodule:: src.game

@@ -34,7 +34,7 @@ from .db import (
 all_game_emoji = {
     "Fast and hungry, task hunt": ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
 }
-positions_game_1 = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
+# positions_game_1 = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
 league_positions = [
     "1️⃣",
     "2️⃣",
@@ -47,6 +47,12 @@ league_positions = [
     "9️⃣",
     "🔟"
 ]
+
+
+class MissingGameConfig(Exception):
+    """
+    Exception raised when the game configuration is missing or incomplete.
+    """
 
 
 class GameStats:
@@ -180,6 +186,9 @@ async def initialize_game_1(
                 break
             tasks.append(main_task)
             await create_quests(config, player, game, tasks)
+            positions_game_1 = all_game_emoji.get("Fast and hungry, task hunt", [])
+            if not positions_game_1:
+                raise MissingGameConfig("No emojis found for game 'Fast and hungry, task hunt'.")
             await dc_user.send(
                 f"Hello {dc_user.name}, you are now in the game "
                 f'"{game.name}". You have to complete the following quests:\n'
@@ -196,6 +205,10 @@ async def initialize_game_1(
             f"Error sending message to user {player.name} with dc_id: {player.dc_id}. "
             f"Error: {err}"
         )
+        await stop_game(config, game)
+        return False
+    except MissingGameConfig as err:
+        config.watcher.logger.error(f"Missing game configuration: {err}")
         await stop_game(config, game)
         return False
 

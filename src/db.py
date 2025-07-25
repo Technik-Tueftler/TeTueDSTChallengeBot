@@ -27,6 +27,7 @@ class ReactionStatus(Enum):
     DELETED_PLAYER: int = 2
     REGISTERED: int = 3
     SUPPORTER: int = 4
+    REVIEW: int = 5
 
 
 class GameStatus(Enum):
@@ -417,30 +418,23 @@ async def get_games_f_reaction(config: Configuration) -> list[Game] | None:
     Returns:
         list[Game] | None: valid games to track reactions or None if no games found
     """
-    try:
-        async with config.db.session() as session:
-            async with session.begin():
-                games = (
-                    (
-                        await session.execute(
-                            select(Game).where(
-                                Game.status.not_in(
-                                    [GameStatus.FINISHED, GameStatus.STOPPED]
-                                ),
-                                Game.channel_id.is_not(None),
-                            )
+    async with config.db.session() as session:
+        async with session.begin():
+            games = (
+                (
+                    await session.execute(
+                        select(Game).where(
+                            Game.status.not_in(
+                                [GameStatus.FINISHED, GameStatus.STOPPED]
+                            ),
+                            Game.channel_id.is_not(None),
                         )
                     )
-                    .scalars()
-                    .all()
                 )
-        return games
-    except Exception as err:
-        config.watcher.logger.error(
-            f"Error while getting games for reaction: {str(err)}", exc_info=True
-        )
-        return []
-
+                .scalars()
+                .all()
+            )
+    return games
 
 async def get_random_tasks(
     config: Configuration, limit: int, rating_min: int = 0, rating_max: int = 101
@@ -610,7 +604,7 @@ async def balanced_task_mix_random(
         return []
 
 
-async def get_all_gameXplayer_from_message_id(
+async def get_all_game_x_player_from_message_id(
     config: Configuration, message_id: int
 ) -> Game | None:
     """
@@ -639,15 +633,21 @@ async def get_all_gameXplayer_from_message_id(
 async def get_all_db_obj_from_id(
     config: Configuration, obj: Player, ids: list[int]
 ) -> list[Player]:
-    try:
-        async with config.db.session() as session:
-            async with session.begin():
-                result = await session.execute(select(obj).where(obj.id.in_(ids)))
-        return result.scalars().all()
-    except Exception as err:
-        config.watcher.logger.error(
-            f"Error while getting objects from ID: {str(err)}", exc_info=True
-        )
+    """
+    Function returns all objects from database based on given IDs from handed over object class.
+
+    Args:
+        config (Configuration): App configuration
+        obj (Player): Object class to get from database
+        ids (list[int]): List of IDs to get from database
+
+    Returns:
+        list[Player]: List of objects from database based on IDs and handed over class
+    """
+    async with config.db.session() as session:
+        async with session.begin():
+            result = await session.execute(select(obj).where(obj.id.in_(ids)))
+    return result.scalars().all()
 
 
 async def update_db_obj(
@@ -664,9 +664,22 @@ async def update_db_obj(
         async with config.db.session() as session:
             async with session.begin():
                 session.add(obj)
+                config.watcher.logger.trace(
+                    f"Updated object in database: {obj.__class__.__name__} with ID: {obj.id}"
+                )
 
 
 async def insert_db_obj(config: Configuration, obj: Reaction) -> Reaction:
+    """
+    Fuction to insert a new handed over object into the database and return the object.
+
+    Args:
+        config (Configuration): App configuration
+        obj (Reaction): Handed over object to insert into the database
+
+    Returns:
+        Reaction: Inserted and updated object
+    """
     try:
         async with config.db.write_lock:
             async with config.db.session() as session:

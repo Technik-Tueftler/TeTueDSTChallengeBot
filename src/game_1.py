@@ -1,21 +1,32 @@
 """
 Module for handling the 'Fast and hungry, task hunt' game.
 """
+
 import asyncio
 from typing import List
 from datetime import datetime
 import discord
 from discord import Interaction, errors
-from .game import positions_game_1, initialize_game_1
+from .game import MissingGameConfig
+from .game import all_game_emoji, initialize_game_1
 from .configuration import Configuration
 from .db import Player, Exercise, GameStatus, Game
-from .db import get_random_tasks, process_player, update_db_obj, create_game, get_main_task, get_games_w_status, get_game_from_id
+from .db import (
+    get_random_tasks,
+    process_player,
+    update_db_obj,
+    create_game,
+    get_main_task,
+    get_games_w_status,
+    get_game_from_id,
+)
 
 
 class GameDifficultyInput(discord.ui.View):
     """
     Input view for selecting the difficulty level of the game.
     """
+
     def __init__(self, config: Configuration):
         super().__init__(timeout=60)
         self.difficulty = None
@@ -59,20 +70,19 @@ class ConfirmationView(discord.ui.View):
         self.config = config
 
     @discord.ui.button(label="Im sure!", style=discord.ButtonStyle.danger)
-    async def button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def button_callback(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):  # pylint: disable=unused-argument
         """
         Callback function for the confirm button.
         """
-        try:
-            await asyncio.sleep(2)
-            await interaction.response.edit_message(
-                content=f"Evaluation of the game with ID: {self.game.id} is finished. Game status is also set to finished.",
-                view=None
-            )
-            self.stop()
-        except Exception as err:
-            print(err)
-
+        await asyncio.sleep(2)
+        await interaction.response.edit_message(
+            content=f"Evaluation of the game with ID: {self.game.id} is finished. "
+            + "Game status is also set to finished.",
+            view=None,
+        )
+        self.stop()
 
 
 class GameSelect(discord.ui.Select):
@@ -104,9 +114,10 @@ class GameSelect(discord.ui.Select):
             game = await get_game_from_id(self.config, self.values[0])
             confirmation_view = ConfirmationView(self.config, game)
             await interaction.response.edit_message(
-                            content=f"You are sure to evaluate and finish the game with ID: {game.id}? This is not reversible!",
-                            view=confirmation_view
-                        )
+                content=f"You are sure to evaluate and finish the game with ID: {game.id}? "
+                + "This is not reversible!",
+                view=confirmation_view,
+            )
         except AttributeError as err:
             self.config.watcher.logger.error(f"Attribute error during callback: {err}")
 
@@ -264,7 +275,7 @@ class UserSelectView(discord.ui.View):
         max_values=6,
     )
     async def user_select(
-        self, interaction: Interaction, select: discord.ui.UserSelect
+        self, interaction: discord.Interaction, select: discord.ui.UserSelect
     ):
         """
         Function to handle the user selection menu and create a player list.
@@ -272,7 +283,7 @@ class UserSelectView(discord.ui.View):
         call the interface to input player information.
 
         Args:
-            interaction (Interaction): Interaction object
+            interaction (discord.Interaction): Interaction object from Discord
             select (discord.ui.UserSelect): UserSelect object
         """
         translated_player_list = [
@@ -291,56 +302,74 @@ async def game1(interaction: discord.Interaction, config: Configuration):
     Command function to start a game with a user selection menu. This game is
     about completing all tasks and surviving. The game ends as soon as one
     player has completed all tasks.
+
+    Args:
+        interaction (discord.Interaction): Interaction object from Discord
+        config (Configuration): App configuration
     """
-    if interaction.guild:
-        user_view = UserSelectView(config)
-        await interaction.response.send_message(
-            'Select the players for the game "Fast and hungry, task hunt":',
-            view=user_view,
-            ephemeral=True,
-        )
-        await user_view.wait()
-        if not user_view.valid_input:
-            return
-        config.watcher.logger.trace(
-            f"Selected players: {[player.name for player in user_view.player_list]}")
-        players = await process_player(config, user_view.player_list)
-        game = await create_game(config, "Fast and hungry, task hunt", players)
-        main_task = await get_main_task(config)
-        config.watcher.logger.trace(
-            f"Created game with ID: {game.id} and main task: {main_task.name}"
-        )
-        success = await initialize_game_1(config, interaction, game, players, main_task)
-        config.watcher.logger.trace(
-            f"Game initialization success: {success}"
-        )
-        if not success:
-            await interaction.followup.send(
-                (
-                    "An error has occurred while creating the game. Please check the error "
-                    "log and documentation."
-                ),
+    try:
+        if interaction.guild:
+            user_view = UserSelectView(config)
+            await interaction.response.send_message(
+                'Select the players for the game "Fast and hungry, task hunt":',
+                view=user_view,
                 ephemeral=True,
             )
-            return
-
-        output_message = (
-            f'The players for game (ID: {game.id}) "Fast and hungry, task hunt" are:\n'
-        )
-        for player in players:
-            output_message = (
-                output_message
-                + f"<@{player.dc_id}> with {player.hours} playing hours.\n"
+            await user_view.wait()
+            if not user_view.valid_input:
+                return
+            config.watcher.logger.trace(
+                f"Selected players: {[player.name for player in user_view.player_list]}"
             )
-        output_message += "Each player now receives a private message with the tasks."
-        message = await interaction.followup.send(output_message)
-        for element in positions_game_1:
-            await message.add_reaction(element)
-        game.message_id = message.id
-        await update_db_obj(config, game)
+            players = await process_player(config, user_view.player_list)
+            game = await create_game(config, "Fast and hungry, task hunt", players)
+            main_task = await get_main_task(config)
+            config.watcher.logger.trace(
+                f"Created game with ID: {game.id} and main task: {main_task.name}"
+            )
+            success = await initialize_game_1(config, interaction, game, players, main_task)
+            config.watcher.logger.trace(f"Game initialization success: {success}")
+            if not success:
+                await interaction.followup.send(
+                    (
+                        "An error has occurred while creating the game. Please check the error "
+                        "log and documentation."
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            output_message = (
+                f'The players for game (ID: {game.id}) "Fast and hungry, task hunt" are:\n'
+            )
+            for player in players:
+                output_message = (
+                    output_message
+                    + f"<@{player.dc_id}> with {player.hours} playing hours.\n"
+                )
+            output_message += "Each player now receives a private message with the tasks."
+            message = await interaction.followup.send(output_message)
+            positions_game_1 = all_game_emoji.get("Fast and hungry, task hunt", [])
+            if not positions_game_1:
+                raise MissingGameConfig("No emojis found for game 'Fast and hungry, task hunt'.")
+            for element in positions_game_1:
+                await message.add_reaction(element)
+            game.message_id = message.id
+            game.channel_id = message.channel.id
+            await update_db_obj(config, game)
+    except MissingGameConfig as err:
+        config.watcher.logger.error(f"Missing game configuration: {err}, game not started.")
 
 
 async def game1_evaluate(interaction: discord.Interaction, config: Configuration):
+    """
+    Command function to evaluate and finish a game of 'Fast and hungry, task hunt'.
+    This function allows the user to select a game that has been evaluated and finished.
+
+    Args:
+        interaction (discord.Interaction): Interaction object from Discord
+        config (Configuration): App configuration
+    """
     games = await get_games_w_status(config, [GameStatus.STOPPED])
     select_view = GameSelectView(config, games)
     await interaction.response.send_message(
@@ -349,16 +378,13 @@ async def game1_evaluate(interaction: discord.Interaction, config: Configuration
         ephemeral=True,
     )
 
-        # try:
-        #     # Über die Nachrichten ID die Nachricht abrufen
-        #     new_message = await interaction.channel.fetch_message(int(message.id))
-        #     # Über die Nachricht ID die Reaktionen abrufen
-        #     for reaction in new_message.reactions:
-        #         emoji = reaction.emoji
-        #         count = reaction.count
-        #         users = [user async for user in reaction.users()]
-        #         print(
-        #             f"Emoji: {emoji}, Anzahl: {count}, Benutzer: {[user.name for user in users]}"
-        #         )
-        # except Exception as e:
-        #     print(f"Error fetching message: {e}")
+    # channel = bot.get_channel(CHANNEL_ID)
+    # message = await channel.fetch_message(MESSAGE_ID)
+    # for reaction in message.reactions:
+    #     if str(reaction.emoji) not in positions_game_1:
+    #         async for user in reaction.users():
+    #             await message.remove_reaction(reaction.emoji, user)
+    #     else:
+    #         async for user in reaction.users():
+    #             if user.id not in ALLOWED_USER_IDS:
+    #                 await message.remove_reaction(reaction.emoji, user)

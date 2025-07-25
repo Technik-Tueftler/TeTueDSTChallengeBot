@@ -33,7 +33,9 @@ class DiscordBot:
 
         @self.bot.event
         async def on_raw_reaction_add(payload):
-            await schedule_reaction_tracker(self.config, payload)
+            if payload.user_id == self.bot.user.id:
+                return
+            await schedule_reaction_tracker(self.bot, self.config, payload)
 
         self.register_commands()
 
@@ -131,9 +133,15 @@ class DiscordBot:
 
     @tasks.loop(seconds=10)
     async def reaction_tracker(self):
+        """
+        Experimental reaction tracker task that checks for reactions
+        """
         # await schedule_reaction_tracker(self.bot, self.config)
-        ...
+
 
     @reaction_tracker.before_loop
     async def init_reaction_tracker(self):
+        """
+        Function to initialize the reaction tracker before it starts.
+        """
         await self.bot.wait_until_ready()

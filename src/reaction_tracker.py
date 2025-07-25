@@ -2,13 +2,15 @@
 
 import datetime
 from discord.raw_models import RawReactionActionEvent
+from discord.ext.commands.bot import Bot as DiscordBot
 from .db import (
     get_games_f_reaction,
-    get_all_gameXplayer_from_message_id,
+    get_all_game_x_player_from_message_id,
     insert_db_obj,
     get_all_db_obj_from_id,
+    update_db_obj
 )
-from .db import Reaction, Player, GameStatus
+from .db import Reaction, Player, GameStatus, ReactionStatus
 from .configuration import Configuration
 from .game import all_game_emoji
 
@@ -16,8 +18,32 @@ from .game import all_game_emoji
 # allowed_game_messages = []
 
 
+async def remove_reaction(
+    bot: DiscordBot, config: Configuration, payload: RawReactionActionEvent
+) -> None:
+    """
+    Function load all necessary informations and remove the reaction from the message.
+
+    Args:
+        bot (DiscordBot): Discord bot instance
+        config (Configuration): App configuration
+        payload (RawReactionActionEvent): payload information from reaction event
+    """
+    try:
+        config.watcher.logger.debug(
+            f"Removing reaction: {payload.emoji.name} from user: {payload.user_id} "
+            + f"on message ID: {payload.message_id} in channel ID: {payload.channel_id}"
+        )
+        channel = await bot.fetch_channel(payload.channel_id)
+        message = await channel.fetch_message(payload.message_id)
+        member = await bot.fetch_user(payload.user_id)
+        await message.remove_reaction(payload.emoji, member)
+    except TypeError as err:
+        config.watcher.logger.error(f"TypeError during reaction tracker: {err}")
+
+
 async def schedule_reaction_tracker(
-    config: Configuration, payload: RawReactionActionEvent
+    bot: DiscordBot, config: Configuration, payload: RawReactionActionEvent
 ):
     """
     Function to schedule the reaction tracker.
@@ -27,14 +53,15 @@ async def schedule_reaction_tracker(
         config.watcher.logger.trace(f"Reaction check: {datetime.datetime.now()}")
         config.watcher.logger.debug(
             f"Reaction: {payload.emoji.name}, "
-            + f"User: {payload.member} / {payload.user_id}, Message ID: {payload.message_id}"
+            + f"User: {payload.member} / {payload.user_id}, Message ID: {payload.message_id} "
+            + f"Channel ID {payload.channel_id}"
         )
         games = await get_games_f_reaction(config)
         reaction = await insert_db_obj(
             config,
             Reaction(
                 dc_id=payload.user_id,
-                status="NEW",
+                status=ReactionStatus.NEW,
                 timestamp=datetime.datetime.now(),
                 message_id=payload.message_id,
                 channel_id=payload.channel_id,
@@ -50,7 +77,7 @@ async def schedule_reaction_tracker(
             f"Allowed messages for reactions: {allowed_message_ids}"
         )
         if payload.message_id in allowed_message_ids:
-            game_x_player = await get_all_gameXplayer_from_message_id(
+            game_x_player = await get_all_game_x_player_from_message_id(
                 config, payload.message_id
             )
             if game_x_player:
@@ -62,42 +89,51 @@ async def schedule_reaction_tracker(
                 )
                 player_dc_ids = [int(player.dc_id) for player in player]
                 game_status = game_x_player.status
+                game_id = game_x_player.id
 
                 match game_status:
-                    case GameStatus.CREATED | GameStatus.PAUSED if payload.emoji.name in game_emojis:
-                        config.watcher.logger.debug(f"Delete reaction because of status. Reaction-ID:{reaction.id}, Game-ID: {game_x_player.id}")
-                    case GameStatus.RUNNING if payload.emoji.name in game_emojis and payload.user_id in player_dc_ids:
-                        print("Emoji and user ID match for game reaction")
-                        # -> registered
-                    case GameStatus.RUNNING if payload.emoji.name in game_emojis and payload.user_id not in player_dc_ids:
-                        config.watcher.logger.debug(f"Delete reaction because of player. Reaction-ID:{reaction.id}.")
-                    case GameStatus.RUNNING if payload.emoji.name not in game_emojis:
-                        config.watcher.logger.debug(f"Support reaction. Reaction-ID:{reaction.id}.")
+                    case GameStatus.CREATED | GameStatus.PAUSED if (
+                        payload.emoji.name in game_emojis
+                    ):
+                        config.watcher.logger.debug(
+                            "Delete reaction because of status. "
+                            + f"Reaction-ID:{reaction.id}, Game-ID: {game_x_player.id}"
+                        )
+                        await remove_reaction(bot, config, payload)
+                        reaction.status = ReactionStatus.DELETED_STATUS
+                    case GameStatus.RUNNING if (
+                        payload.emoji.name in game_emojis
+                        and payload.user_id in player_dc_ids
+                    ):
+                        config.watcher.logger.debug(
+                            "Reaction registered. "
+                            + f"Reaction-ID:{reaction.id}, Game-ID: {game_x_player.id}"
+                        )
+                        reaction.status = ReactionStatus.REGISTERED
+                    case GameStatus.RUNNING if (
+                        payload.emoji.name in game_emojis
+                        and payload.user_id not in player_dc_ids
+                    ):
+                        config.watcher.logger.debug(
+                            "Delete reaction because of player. "
+                            + f"Reaction-ID:{reaction.id}, Game-ID: {game_x_player.id}."
+                        )
+                        await remove_reaction(bot, config, payload)
+                        reaction.status = ReactionStatus.DELETED_PLAYER
+                    case _ if payload.emoji.name not in game_emojis:
+                        config.watcher.logger.debug(
+                            "Support reaction. "
+                            + f"Reaction-ID:{reaction.id}, Game-ID: {game_x_player.id}."
+                        )
+                        reaction.status = ReactionStatus.SUPPORTER
                     case _:
-                        print(f"No matching emoji or user ID for game reaction: {payload.emoji.name}, {payload.user_id}")
+                        config.watcher.logger.debug(
+                            "Reaction not matching game status or emoji. "
+                            + f"Reaction-ID:{reaction.id}, Game-ID: {game_x_player.id}"
+                        )
+                        reaction.status = ReactionStatus.REVIEW
+                reaction.game_id = game_id
+                await update_db_obj(config, reaction)
 
-                # if payload.emoji.name in game_emojis:
-                #     if payload.user_id in player_dc_ids:
-                #
-                # print(f"Game: {game_x_player.id}, Players: {[player.player_id for player in game_x_player.players]}")
-
-        # for game in games:
-        #     channel = bot.get_channel(game.channel_id)
-        #     if channel is None:
-        #         continue
-        #     message = await channel.fetch_message(game.message_id)
-        #     for reaction in message.reactions:
-        #         print(f"Reaction: {reaction.emoji} - {reaction.count}, Users: {reaction.}")
     except TypeError as err:
         config.watcher.logger.error(f"TypeError during reaction tracker: {err}")
-    except Exception as err:
-        config.watcher.logger.error(f"Error during reaction tracker: {err}")
-        # message = await channel.fetch_message(MESSAGE_ID)
-        # for reaction in message.reactions:
-        #     if str(reaction.emoji) not in positions_game_1:
-        #         async for user in reaction.users():
-        #             await message.remove_reaction(reaction.emoji, user)
-        #     else:
-        #         async for user in reaction.users():
-        #             if user.id not in ALLOWED_USER_IDS:
-        #                 await message.remove_reaction(reaction.emoji, user)

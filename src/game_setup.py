@@ -3,9 +3,11 @@ File contains all the functions required to adjust the status of a game.
 The workflow is started via a command.
 """
 
+import asyncio
 import discord
 from .configuration import Configuration
 from .db import get_games_w_status, GameStatus, get_game_from_id, update_db_obj
+from .db import GameStatus, Game
 
 
 class StatusSelect(discord.ui.Select):
@@ -154,7 +156,7 @@ async def setup_game(interaction: discord.Interaction, config: Configuration):
     )
 
 
-async def evaluate_game(interaction: discord.Interaction, config: Configuration):
+async def evaluate_game2(interaction: discord.Interaction, config: Configuration):
     """
     Command function to evaluate and finish a game of 'Fast and hungry, task hunt'.
     This function allows the user to select a game that has been evaluated and finished.
@@ -170,3 +172,110 @@ async def evaluate_game(interaction: discord.Interaction, config: Configuration)
         view=select_view,
         ephemeral=True,
     )
+
+
+class GenGameSelect(discord.ui.Select):
+    def __init__(self, config, games):
+        self.config = config
+        options = [
+            discord.SelectOption(
+                label=f"{game.id}: {game.timestamp.strftime('%Y-%m-%d')}",
+                value=str(game.id),
+                emoji=game.status.icon,
+                description=f"{game.name} in status: {game.status.name}",
+            )
+            for game in games
+        ]
+        super().__init__(
+            placeholder="Select a game...",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        self.view.selected_game_id = self.values[0]
+        self.disabled = True
+        self.view.stop()
+        await interaction.response.edit_message(
+            content=f"You have chosen the game with id {self.values[0]}.",
+            view=self.view,
+        )
+
+
+class GenGameSelectView(discord.ui.View):
+    def __init__(self, config, games):
+        super().__init__()
+        self.selected_game_id = None
+        self.add_item(GenGameSelect(config, games))
+
+    async def wait_for_selection(self):
+        await self.wait()
+        return self.selected_game_id
+
+
+class ConfirmationView(discord.ui.View):
+    """
+    ConfirmationView class to create a confirmation view for the user.
+    This view is used to confirm the game setup.
+    """
+
+    def __init__(self, config: Configuration, game: Game):
+        super().__init__(timeout=60)
+        self.game = game
+        self.config = config
+        self.result = None
+
+    @discord.ui.button(label="Im sure!", style=discord.ButtonStyle.danger)
+    async def button_callback(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):  # pylint: disable=unused-argument
+        """
+        Callback function for the confirm button.
+        """
+        await asyncio.sleep(2)
+        self.result = True
+        await interaction.response.edit_message(
+            content=f"Evaluation of the game with ID: {self.game.id} started",
+            view=None,
+        )
+        self.stop()
+
+    async def on_timeout(self):
+        self.result = False
+        await super().on_timeout()
+
+
+async def evaluate_game(interaction: discord.Interaction, config: Configuration):
+    games = await get_games_w_status(config, [GameStatus.STOPPED])
+    select_view = GenGameSelectView(config, games)
+    await interaction.response.send_message(
+        "Which game would you like to evaluate and finish?",
+        view=select_view,
+        ephemeral=True,
+    )
+    chosen_game_id = await select_view.wait_for_selection()
+    if chosen_game_id is None:
+        await interaction.followup.send("No game selected.", ephemeral=True)
+        return
+    game = await get_game_from_id(config, chosen_game_id)
+    confirmation_view = ConfirmationView(config, game)
+    await interaction.followup.send(
+        content=f"You are sure to evaluate and finish the game with ID: {game.id}? "
+        + "This is not reversible!",
+        view=confirmation_view,
+        ephemeral=True,
+    )
+    await confirmation_view.wait()
+
+    if not confirmation_view.result:
+        return
+
+    # Idee 1
+    match game.name:
+        case "Fast and hungry, task hunt":
+            await finish_game_1
+        case _:
+            config.watcher.logger.error(
+                f"Game with ID {game.id} has an unknown name: {game.name}."
+            )

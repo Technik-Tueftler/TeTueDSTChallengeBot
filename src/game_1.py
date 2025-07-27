@@ -7,10 +7,15 @@ from typing import List
 from datetime import datetime
 import discord
 from discord import Interaction, errors
-from .game import MissingGameConfig
-from .game import all_game_emoji, initialize_game_1
+from .game import MissingGameConfig, GameStats
+from .game import game_configs, failed_game, get_player_rank, create_quests
 from .configuration import Configuration
-from .db import Player, Exercise, Game
+from .db import (
+    Player,
+    Exercise,
+    Game,
+    Task,
+)
 from .db import (
     get_random_tasks,
     process_player,
@@ -18,6 +23,10 @@ from .db import (
     create_game,
     get_main_task,
     get_game_from_id,
+    get_tasks_based_on_rating_1,
+    balanced_task_mix_random,
+    get_all_db_obj_from_id,
+    get_all_game_x_player_from_message_id,
 )
 
 
@@ -326,7 +335,9 @@ async def game1(interaction: discord.Interaction, config: Configuration):
             config.watcher.logger.trace(
                 f"Created game with ID: {game.id} and main task: {main_task.name}"
             )
-            success = await initialize_game_1(config, interaction, game, players, main_task)
+            success = await initialize_game_1(
+                config, interaction, game, players, main_task
+            )
             config.watcher.logger.trace(f"Game initialization success: {success}")
             if not success:
                 await interaction.followup.send(
@@ -338,23 +349,152 @@ async def game1(interaction: discord.Interaction, config: Configuration):
                 )
                 return
 
-            output_message = (
-                f'The players for game (ID: {game.id}) "Fast and hungry, task hunt" are:\n'
-            )
+            output_message = f'The players for game (ID: {game.id}) "Fast and hungry, task hunt" are:\n'
             for player in players:
                 output_message = (
                     output_message
                     + f"<@{player.dc_id}> with {player.hours} playing hours.\n"
                 )
-            output_message += "Each player now receives a private message with the tasks."
+            output_message += (
+                "Each player now receives a private message with the tasks."
+            )
             message = await interaction.followup.send(output_message)
-            positions_game_1 = all_game_emoji.get("Fast and hungry, task hunt", [])
+            positions_game_1 = game_configs.get(
+                "Fast and hungry, task hunt", []
+            ).game_emojis
             if not positions_game_1:
-                raise MissingGameConfig("No emojis found for game 'Fast and hungry, task hunt'.")
+                raise MissingGameConfig(
+                    "No emojis found for game 'Fast and hungry, task hunt'."
+                )
             for element in positions_game_1:
                 await message.add_reaction(element)
             game.message_id = message.id
             game.channel_id = message.channel.id
             await update_db_obj(config, game)
     except MissingGameConfig as err:
-        config.watcher.logger.error(f"Missing game configuration: {err}, game not started.")
+        config.watcher.logger.error(
+            f"Missing game configuration: {err}, game not started."
+        )
+    except Exception as err:
+        config.watcher.logger.error(
+            f"An error occurred while starting the game: {err}. Please check the error log."
+        )
+
+
+async def initialize_game_1(
+    config: Configuration,
+    interaction: Interaction,
+    game: Game,
+    players: list[Player],
+    main_task: Task,
+) -> bool:
+    """
+    Function to initialize the game and send a message to all players with the
+    tasks they have to complete.
+
+    Args:
+        config (Configuration): App configuration
+        interaction (Interaction): Interaction object to get the guild
+        game (Game): Game object to get the game id
+        players (list[Player]): List of players to get the player ids and send messages with quests
+        main_task (Task): Main task for all player in game 1
+    """
+    try:
+        game_statistics = GameStats()
+        await game_statistics.process_league_stats(config)
+        players.sort(key=lambda x: x.hours, reverse=True)
+        config.watcher.logger.debug(game_statistics)
+        exclude_ids = set()
+        exclude_lock = asyncio.Lock()  # pylint: disable=not-callable
+        for player in players:
+            dc_user = await interaction.guild.fetch_member(player.dc_id)
+            if dc_user is None:
+                config.logger.error(
+                    f"User {player.name} not found in the guild with dc_id: {player.dc_id}."
+                )
+                await failed_game(config, game)
+                break
+            player_rank = await get_player_rank(config, player, game_statistics)
+            rated_tasks = await get_tasks_based_on_rating_1(config, player_rank * 100)
+            if not rated_tasks:
+                config.watcher.logger.error(
+                    f"No tasks found for player rating {player_rank}: {player.name}."
+                )
+                await failed_game(config, game)
+                break
+            async with exclude_lock:
+                tasks = await balanced_task_mix_random(config, rated_tasks, exclude_ids)
+                config.watcher.logger.debug(
+                    f"Tasks for player {player.name}: {[task.name for task in tasks]}"
+                )
+                config.watcher.logger.debug(f"Exclude IDs: {exclude_ids}")
+            if not tasks:
+                config.watcher.logger.error(
+                    f"No tasks found for player with Algo-Balanced: {player.name}."
+                )
+                await failed_game(config, game)
+                break
+            tasks.append(main_task)
+            await create_quests(config, player, game, tasks)
+            positions_game_1 = game_configs.get(
+                "Fast and hungry, task hunt", []
+            ).game_emojis
+            if not positions_game_1:
+                raise MissingGameConfig(
+                    "No emojis found for game 'Fast and hungry, task hunt'."
+                )
+            await dc_user.send(
+                f"Hello {dc_user.name}, you are now in the game "
+                f'"{game.name}". You have to complete the following quests:\n'
+                + "\n".join(
+                    f"{positions_game_1[i]} {task.name}: {task.description}"
+                    for i, task in enumerate(tasks)
+                )
+            )
+        else:
+            return True
+        return False
+    except errors.HTTPException as err:
+        config.watcher.logger.error(
+            f"Error sending message to user {player.name} with dc_id: {player.dc_id}. "
+            f"Error: {err}"
+        )
+        await failed_game(config, game)
+        return False
+    except MissingGameConfig as err:
+        config.watcher.logger.error(f"Missing game configuration: {err}")
+        await failed_game(config, game)
+        return False
+    except Exception as err:
+        config.watcher.logger.error(
+            f"An error occurred while starting the game: {err}. Please check the error log."
+        )
+
+
+async def finish_game_1(config: Configuration, game: Game, bot):
+    try:
+        game_x_player = await get_all_game_x_player_from_message_id(config, game.message_id)
+        player = await get_all_db_obj_from_id(
+            config,
+            Player,
+            [player.player_id for player in game_x_player.players],
+        )
+        player_dc_ids = [int(player.dc_id) for player in player]
+        game_emojis = game_configs.get(game_x_player.name, []).game_emojis
+        print(f"Game: {game.id} with players: {player_dc_ids}")
+        print(f"game emojis: {game_emojis}")
+        # Als nächstes alle Emotes aus der Nachricht mit Message ID und Channel ID
+        channel = await bot.fetch_channel(game_x_player.channel_id)
+        message = await channel.fetch_message(game_x_player.message_id)
+
+        # Alle Reaktionen iterieren
+        for reaction in message.reactions:
+            # reaction.emoji enthält das Emoji
+            # reaction.count wie viele User das Emoji genutzt haben
+            # reaction.users() gibt alle User zurück
+            userlist = [user async for user in reaction.users()]
+            print(userlist)
+    except Exception as err:
+        config.watcher.logger.error(
+            f"An error occurred while finishing the game: {err}"
+        )

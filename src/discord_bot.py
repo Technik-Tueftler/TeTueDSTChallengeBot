@@ -70,7 +70,7 @@ class DiscordBot:
             await game1(interaction, self.config)
 
         async def wrapped_evaluate_game(interaction: discord.Interaction):
-            await evaluate_game(interaction, self.config)
+            await evaluate_game(interaction, self.config, self.bot)
 
         async def wrapped_practice_game1_command(interaction: discord.Interaction):
             await practice_game1(interaction, self.config)

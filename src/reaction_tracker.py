@@ -12,7 +12,7 @@ from .db import (
 )
 from .db import Reaction, Player, GameStatus, ReactionStatus
 from .configuration import Configuration
-from .game import all_game_emoji
+from .game import game_configs
 
 # reaction_lock = asyncio.Lock()
 # allowed_game_messages = []
@@ -81,7 +81,7 @@ async def schedule_reaction_tracker(
                 config, payload.message_id
             )
             if game_x_player:
-                game_emojis = all_game_emoji.get(game_x_player.name, [])
+                game_emojis = game_configs.get(game_x_player.name, []).game_emojis
                 player = await get_all_db_obj_from_id(
                     config,
                     Player,

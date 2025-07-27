@@ -27,26 +27,10 @@ from .db import (
     League,
     Rank,
     get_player,
-    get_tasks_based_on_rating_1,
-    balanced_task_mix_random,
 )
 
-all_game_emoji = {
-    "Fast and hungry, task hunt": ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
-}
-# positions_game_1 = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
-league_positions = [
-    "1️⃣",
-    "2️⃣",
-    "3️⃣",
-    "4️⃣",
-    "5️⃣",
-    "6️⃣",
-    "7️⃣",
-    "8️⃣",
-    "9️⃣",
-    "🔟"
-]
+
+league_positions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
 
 
 class MissingGameConfig(Exception):
@@ -118,6 +102,19 @@ class GameStats:
         return self.count_league_participants > 0 and self.max_hours > 0
 
 
+class GameConfig:
+    def __init__(self, name, game_emojis):
+        self.name: str = name
+        self.game_emojis: list = game_emojis
+
+
+game_configs = {
+    "Fast and hungry, task hunt": GameConfig(
+        name="Fast and hungry, task hunt", game_emojis=["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
+    )
+}
+
+
 async def failed_game(config: Configuration, game: Game) -> None:
     """
     Helper function to stop a game in case that a wrong input has been givin in selection menu
@@ -129,89 +126,9 @@ async def failed_game(config: Configuration, game: Game) -> None:
     """
     game.status = GameStatus.FAILURE
     await update_db_obj(config, game)
-    config.watcher.logger.info(f"Game with ID: {game.id} was set to failure because of an error.")
-
-
-async def initialize_game_1(
-    config: Configuration,
-    interaction: Interaction,
-    game: Game,
-    players: list[Player],
-    main_task: Task,
-) -> bool:
-    """
-    Function to initialize the game and send a message to all players with the
-    tasks they have to complete.
-
-    Args:
-        config (Configuration): App configuration
-        interaction (Interaction): Interaction object to get the guild
-        game (Game): Game object to get the game id
-        players (list[Player]): List of players to get the player ids and send messages with quests
-        main_task (Task): Main task for all player in game 1
-    """
-    try:
-        game_statistics = GameStats()
-        await game_statistics.process_league_stats(config)
-        players.sort(key=lambda x: x.hours, reverse=True)
-        config.watcher.logger.debug(game_statistics)
-        exclude_ids = set()
-        exclude_lock = asyncio.Lock()  # pylint: disable=not-callable
-        for player in players:
-            dc_user = await interaction.guild.fetch_member(player.dc_id)
-            if dc_user is None:
-                config.logger.error(
-                    f"User {player.name} not found in the guild with dc_id: {player.dc_id}."
-                )
-                await failed_game(config, game)
-                break
-            player_rank = await get_player_rank(config, player, game_statistics)
-            rated_tasks = await get_tasks_based_on_rating_1(config, player_rank * 100)
-            if not rated_tasks:
-                config.watcher.logger.error(
-                    f"No tasks found for player rating {player_rank}: {player.name}."
-                )
-                await failed_game(config, game)
-                break
-            async with exclude_lock:
-                tasks = await balanced_task_mix_random(config, rated_tasks, exclude_ids)
-                config.watcher.logger.debug(
-                    f"Tasks for player {player.name}: {[task.name for task in tasks]}"
-                )
-                config.watcher.logger.debug(f"Exclude IDs: {exclude_ids}")
-            if not tasks:
-                config.watcher.logger.error(
-                    f"No tasks found for player with Algo-Balanced: {player.name}."
-                )
-                await failed_game(config, game)
-                break
-            tasks.append(main_task)
-            await create_quests(config, player, game, tasks)
-            positions_game_1 = all_game_emoji.get("Fast and hungry, task hunt", [])
-            if not positions_game_1:
-                raise MissingGameConfig("No emojis found for game 'Fast and hungry, task hunt'.")
-            await dc_user.send(
-                f"Hello {dc_user.name}, you are now in the game "
-                f'"{game.name}". You have to complete the following quests:\n'
-                + "\n".join(
-                    f"{positions_game_1[i]} {task.name}: {task.description}"
-                    for i, task in enumerate(tasks)
-                )
-            )
-        else:
-            return True
-        return False
-    except errors.HTTPException as err:
-        config.watcher.logger.error(
-            f"Error sending message to user {player.name} with dc_id: {player.dc_id}. "
-            f"Error: {err}"
-        )
-        await failed_game(config, game)
-        return False
-    except MissingGameConfig as err:
-        config.watcher.logger.error(f"Missing game configuration: {err}")
-        await failed_game(config, game)
-        return False
+    config.watcher.logger.info(
+        f"Game with ID: {game.id} was set to failure because of an error."
+    )
 
 
 async def create_quests(

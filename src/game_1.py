@@ -483,17 +483,7 @@ async def finish_game_1(config: Configuration, game: Game, bot):
         game_emojis = game_configs.get(game_x_player.name, []).game_emojis
         print(f"Game: {game.id} with players: {player_dc_ids}")
         print(f"game emojis: {game_emojis}")
-        # Als nächstes alle Emotes aus der Nachricht mit Message ID und Channel ID
-        channel = await bot.fetch_channel(game_x_player.channel_id)
-        message = await channel.fetch_message(game_x_player.message_id)
 
-        # Alle Reaktionen iterieren
-        for reaction in message.reactions:
-            # reaction.emoji enthält das Emoji
-            # reaction.count wie viele User das Emoji genutzt haben
-            # reaction.users() gibt alle User zurück
-            userlist = [user async for user in reaction.users()]
-            print(userlist)
     except Exception as err:
         config.watcher.logger.error(
             f"An error occurred while finishing the game: {err}"

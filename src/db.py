@@ -27,7 +27,8 @@ class ReactionStatus(Enum):
     DELETED_PLAYER: int = 2
     REGISTERED: int = 3
     SUPPORTER: int = 4
-    REVIEW: int = 5
+    REMOVED: int = 5
+    REVIEW: int = 6
 
 
 class GameStatus(Enum):
@@ -266,6 +267,7 @@ class Reaction(Base):
         AlchemyEnum(ReactionStatus), default=ReactionStatus.NEW
     )
     timestamp: Mapped[datetime] = mapped_column(nullable=False)
+    last_modified: Mapped[datetime] = mapped_column(nullable=True)
     message_id: Mapped[int] = mapped_column(nullable=False)
     channel_id: Mapped[int] = mapped_column(nullable=False)
     emoji: Mapped[str] = mapped_column(nullable=False)
@@ -436,6 +438,7 @@ async def get_games_f_reaction(config: Configuration) -> list[Game] | None:
                 .all()
             )
     return games
+
 
 async def get_random_tasks(
     config: Configuration, limit: int, rating_min: int = 0, rating_max: int = 101
@@ -692,6 +695,54 @@ async def insert_db_obj(config: Configuration, obj: Reaction) -> Reaction:
         config.watcher.logger.error(f"Integrity error {str(err)}")
     except SQLAlchemyError as err:
         config.watcher.logger.error(f"Database error: {str(err)}", exc_info=True)
+
+
+async def get_reaction(
+    config: Configuration, message_id: int, user_id: int, emoji_name: str
+) -> Reaction | None:
+    config.watcher.logger.trace(
+        f"Get reaction for message ID: {message_id}, user ID: {user_id}, emoji: {emoji_name}"
+    )
+    try:
+        async with config.db.session() as session:
+            return (
+                (
+                    await session.execute(
+                        select(Reaction)
+                        .where(Reaction.message_id == message_id)
+                        .where(Reaction.dc_id == str(user_id))
+                        .where(Reaction.emoji == emoji_name)
+                        .where(
+                            Reaction.status.not_in(
+                                [
+                                    ReactionStatus.DELETED_STATUS,
+                                    ReactionStatus.DELETED_PLAYER,
+                                    ReactionStatus.REMOVED,
+                                ]
+                            )
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+    except Exception as err:
+        config.watcher.logger.error(
+            f"Error getting reaction: {str(err)}", exc_info=True
+        )
+        return None
+
+
+async def set_reaction_status(
+    config: Configuration, reactions: list[Reaction], status: ReactionStatus
+) -> None:
+    async with config.db.write_lock:
+        async with config.db.session() as session:
+            async with session.begin():
+                for reaction in reactions:
+                    reaction.status = status
+                    reaction.last_modified = datetime.now()
+                    session.add(reaction)
 
 
 async def sync_db(engine: AsyncEngine):

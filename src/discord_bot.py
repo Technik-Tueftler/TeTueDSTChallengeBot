@@ -9,7 +9,7 @@ from .game_setup import setup_game, evaluate_game
 from .file_utils import import_tasks, export_tasks
 from .game_1 import practice_game1, game1
 from .game import show_league_table
-from .reaction_tracker import schedule_reaction_tracker
+from .reaction_tracker import schedule_reaction_tracker_add, schedule_reaction_tracker_remove
 
 
 class DiscordBot:
@@ -35,7 +35,14 @@ class DiscordBot:
         async def on_raw_reaction_add(payload):
             if payload.user_id == self.bot.user.id:
                 return
-            await schedule_reaction_tracker(self.bot, self.config, payload)
+            await schedule_reaction_tracker_add(self.bot, self.config, payload)
+        
+        @self.bot.event
+        async def on_raw_reaction_remove(payload):
+            # Not possible to check if the bot is the user who removed the reaction
+            # if payload.user_id == self.bot.user.id:
+            #     return
+            await schedule_reaction_tracker_remove(self.config, payload)
 
         self.register_commands()
 
@@ -70,7 +77,7 @@ class DiscordBot:
             await game1(interaction, self.config)
 
         async def wrapped_evaluate_game(interaction: discord.Interaction):
-            await evaluate_game(interaction, self.config, self.bot)
+            await evaluate_game(interaction, self.config)
 
         async def wrapped_practice_game1_command(interaction: discord.Interaction):
             await practice_game1(interaction, self.config)

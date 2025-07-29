@@ -8,7 +8,9 @@ from .db import (
     get_all_game_x_player_from_message_id,
     insert_db_obj,
     get_all_db_obj_from_id,
-    update_db_obj
+    update_db_obj,
+    get_reaction,
+    set_reaction_status,
 )
 from .db import Reaction, Player, GameStatus, ReactionStatus
 from .configuration import Configuration
@@ -42,7 +44,7 @@ async def remove_reaction(
         config.watcher.logger.error(f"TypeError during reaction tracker: {err}")
 
 
-async def schedule_reaction_tracker(
+async def schedule_reaction_tracker_add(
     bot: DiscordBot, config: Configuration, payload: RawReactionActionEvent
 ):
     """
@@ -50,9 +52,9 @@ async def schedule_reaction_tracker(
     This function calls all necessary functions to admin reactions for each game.
     """
     try:
-        config.watcher.logger.trace(f"Reaction check: {datetime.datetime.now()}")
+        config.watcher.logger.trace(f"Reaction add check: {datetime.datetime.now()}")
         config.watcher.logger.debug(
-            f"Reaction: {payload.emoji.name}, "
+            f"Reaction add: {payload.emoji.name}, "
             + f"User: {payload.member} / {payload.user_id}, Message ID: {payload.message_id} "
             + f"Channel ID {payload.channel_id}"
         )
@@ -99,8 +101,10 @@ async def schedule_reaction_tracker(
                             "Delete reaction because of status. "
                             + f"Reaction-ID:{reaction.id}, Game-ID: {game_x_player.id}"
                         )
-                        await remove_reaction(bot, config, payload)
                         reaction.status = ReactionStatus.DELETED_STATUS
+                        reaction.game_id = game_id
+                        await update_db_obj(config, reaction)
+                        await remove_reaction(bot, config, payload)
                     case GameStatus.RUNNING if (
                         payload.emoji.name in game_emojis
                         and payload.user_id in player_dc_ids
@@ -110,6 +114,8 @@ async def schedule_reaction_tracker(
                             + f"Reaction-ID:{reaction.id}, Game-ID: {game_x_player.id}"
                         )
                         reaction.status = ReactionStatus.REGISTERED
+                        reaction.game_id = game_id
+                        await update_db_obj(config, reaction)
                     case GameStatus.RUNNING if (
                         payload.emoji.name in game_emojis
                         and payload.user_id not in player_dc_ids
@@ -118,22 +124,43 @@ async def schedule_reaction_tracker(
                             "Delete reaction because of player. "
                             + f"Reaction-ID:{reaction.id}, Game-ID: {game_x_player.id}."
                         )
-                        await remove_reaction(bot, config, payload)
                         reaction.status = ReactionStatus.DELETED_PLAYER
+                        reaction.game_id = game_id
+                        await update_db_obj(config, reaction)
+                        await remove_reaction(bot, config, payload)
                     case _ if payload.emoji.name not in game_emojis:
                         config.watcher.logger.debug(
                             "Support reaction. "
                             + f"Reaction-ID:{reaction.id}, Game-ID: {game_x_player.id}."
                         )
                         reaction.status = ReactionStatus.SUPPORTER
+                        reaction.game_id = game_id
+                        await update_db_obj(config, reaction)
                     case _:
                         config.watcher.logger.debug(
                             "Reaction not matching game status or emoji. "
                             + f"Reaction-ID:{reaction.id}, Game-ID: {game_x_player.id}"
                         )
                         reaction.status = ReactionStatus.REVIEW
-                reaction.game_id = game_id
-                await update_db_obj(config, reaction)
+                        reaction.game_id = game_id
+                        await update_db_obj(config, reaction)
 
     except TypeError as err:
         config.watcher.logger.error(f"TypeError during reaction tracker: {err}")
+
+
+async def schedule_reaction_tracker_remove(
+    config: Configuration, payload: RawReactionActionEvent
+):
+    config.watcher.logger.debug(
+        f"Reaction removed: {payload.emoji.name}, "
+        + f"from user: {payload.user_id}, Message ID: {payload.message_id} "
+        + f"Channel ID {payload.channel_id}"
+    )
+    reactions = await get_reaction(
+        config, payload.message_id, payload.user_id, payload.emoji.name
+    )
+    config.watcher.logger.debug(
+        f"Reactions found: {[reaction.id for reaction in reactions]}"
+    )
+    await set_reaction_status(config, reactions, ReactionStatus.REMOVED)

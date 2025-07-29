@@ -247,8 +247,7 @@ class ConfirmationView(discord.ui.View):
         await super().on_timeout()
 
 
-async def evaluate_game(interaction: discord.Interaction, config: Configuration, bot):
-    print(type(bot))
+async def evaluate_game(interaction: discord.Interaction, config: Configuration):
     games = await get_games_w_status(config, [GameStatus.STOPPED])
     select_view = GenGameSelectView(config, games)
     await interaction.response.send_message(
@@ -276,7 +275,7 @@ async def evaluate_game(interaction: discord.Interaction, config: Configuration,
     # Idee 1
     match game.name:
         case "Fast and hungry, task hunt":
-            await finish_game_1(config, game, bot)
+            await finish_game_1(config, game)
         case _:
             config.watcher.logger.error(
                 f"Game with ID {game.id} has an unknown name: {game.name}."

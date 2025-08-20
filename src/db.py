@@ -161,7 +161,7 @@ class Game(Base):
     )
     playing_days: Mapped[int] = mapped_column(default=70)
     timestamp: Mapped[datetime] = mapped_column(nullable=False)
-    message_id: Mapped[str] = mapped_column(nullable=True)
+    message_id: Mapped[int] = mapped_column(nullable=True)
     channel_id: Mapped[int] = mapped_column(nullable=True)
     players = relationship("GamePlayerAssociation", back_populates="game")
 

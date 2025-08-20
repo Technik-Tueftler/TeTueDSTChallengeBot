@@ -6,7 +6,7 @@ The workflow is started via a command.
 import asyncio
 import discord
 from .configuration import Configuration
-from .db import get_games_w_status, GameStatus, get_game_from_id, update_db_obj
+from .db import get_games_w_status, get_game_from_id, update_db_obj
 from .db import GameStatus, Game
 from .game_1 import finish_game_1
 

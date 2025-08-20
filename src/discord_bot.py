@@ -36,7 +36,7 @@ class DiscordBot:
             if payload.user_id == self.bot.user.id:
                 return
             await schedule_reaction_tracker_add(self.bot, self.config, payload)
-        
+
         @self.bot.event
         async def on_raw_reaction_remove(payload):
             # Not possible to check if the bot is the user who removed the reaction

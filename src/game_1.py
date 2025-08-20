@@ -349,7 +349,10 @@ async def game1(interaction: discord.Interaction, config: Configuration):
                 )
                 return
 
-            output_message = f'The players for game (ID: {game.id}) "Fast and hungry, task hunt" are:\n'
+            output_message = (
+                f"The players for game (ID: {game.id}) "
+                + '"Fast and hungry, task hunt" are:\n'
+            )
             for player in players:
                 output_message = (
                     output_message
@@ -471,9 +474,11 @@ async def initialize_game_1(
         )
 
 
-async def finish_game_1(config: Configuration, game: Game, bot):
+async def finish_game_1(config: Configuration, game: Game):
     try:
-        game_x_player = await get_all_game_x_player_from_message_id(config, game.message_id)
+        game_x_player = await get_all_game_x_player_from_message_id(
+            config, game.message_id
+        )
         player = await get_all_db_obj_from_id(
             config,
             Player,

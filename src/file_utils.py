@@ -2,7 +2,7 @@
 Here are all the functions needed to import and synchronize important game
 information from the game master.
 """
-
+import os
 from pathlib import Path
 from datetime import datetime
 import discord
@@ -78,6 +78,9 @@ async def import_tasks(interaction: discord.Interaction, config: Configuration):
         config (Configuration): App configuration
     """
     try:
+        config.watcher.logger.debug("Reading tasks from file")
+        config.watcher.logger.debug(f"File path: {config.game.input_task_path}")
+        config.watcher.logger.debug(f"Working directory: {os.getcwd()}")
         new_tasks = []
         failed_rows = []
         updated_rows = []
@@ -119,6 +122,8 @@ async def import_tasks(interaction: discord.Interaction, config: Configuration):
         await interaction.response.send_message(message, ephemeral=True)
     except (KeyError, TypeError) as err:
         config.watcher.logger.error(f"Validation error: {err}")
+    except Exception as err:
+        config.watcher.logger.error(f"Error during import: {err}")
 
 
 async def export_tasks(interaction: discord.Interaction, config: Configuration):
@@ -130,6 +135,9 @@ async def export_tasks(interaction: discord.Interaction, config: Configuration):
         config (Configuration): App configuration
     """
     try:
+        config.watcher.logger.debug("Exporting tasks from file")
+        config.watcher.logger.debug(f"File path: {config.game.export_task_path}")
+        config.watcher.logger.debug(f"Working directory: {os.getcwd()}")
         async with config.db.session() as session:
             async with session.begin():
                 tasks = (await session.execute(select(Task))).scalars().all()

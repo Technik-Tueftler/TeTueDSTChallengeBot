@@ -401,6 +401,7 @@ async def get_games_w_status(
     Returns:
         list[Game]: The list if changeable games
     """
+    config.watcher.logger.trace(f"games_w_status called with {status}")
     async with config.db.session() as session:
         async with session.begin():
             games = (
@@ -700,6 +701,18 @@ async def insert_db_obj(config: Configuration, obj: Reaction) -> Reaction:
 async def get_reaction(
     config: Configuration, message_id: int, user_id: int, emoji_name: str
 ) -> Reaction | None:
+    """
+    Get all reactions for a given message ID, user ID and emoji name.
+
+    Args:
+        config (Configuration): App configuration
+        message_id (int): Message ID to search for
+        user_id (int): User ID to search for
+        emoji_name (str): Emoji to search for
+
+    Returns:
+        Reaction | None: Reaction object if found, otherwise None
+    """
     config.watcher.logger.trace(
         f"Get reaction for message ID: {message_id}, user ID: {user_id}, emoji: {emoji_name}"
     )
@@ -736,6 +749,14 @@ async def get_reaction(
 async def set_reaction_status(
     config: Configuration, reactions: list[Reaction], status: ReactionStatus
 ) -> None:
+    """
+    Set the status of a list of reactions to a given status.
+
+    Args:
+        config (Configuration): App configuration
+        reactions (list[Reaction]): List of Reaction objects to update
+        status (ReactionStatus): Status to set for the reactions
+    """
     async with config.db.write_lock:
         async with config.db.session() as session:
             async with session.begin():

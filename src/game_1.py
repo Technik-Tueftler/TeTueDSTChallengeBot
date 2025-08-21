@@ -475,6 +475,13 @@ async def initialize_game_1(
 
 
 async def finish_game_1(config: Configuration, game: Game):
+    """
+    Function to finish the game and update the game status.
+
+    Args:
+        config (Configuration): App configuration
+        game (Game): Game object to finish the game
+    """
     try:
         game_x_player = await get_all_game_x_player_from_message_id(
             config, game.message_id

@@ -48,8 +48,12 @@ async def schedule_reaction_tracker_add(
     bot: DiscordBot, config: Configuration, payload: RawReactionActionEvent
 ):
     """
-    Function to schedule the reaction tracker.
-    This function calls all necessary functions to admin reactions for each game.
+    General function to handle the addition of a reaction to a message.
+
+    Args:
+        bot (DiscordBot): Discord bot instance to interact with Discord API
+        config (Configuration): App configuration
+        payload (RawReactionActionEvent): Payload information from reaction event
     """
     try:
         config.watcher.logger.trace(f"Reaction add check: {datetime.datetime.now()}")
@@ -152,6 +156,13 @@ async def schedule_reaction_tracker_add(
 async def schedule_reaction_tracker_remove(
     config: Configuration, payload: RawReactionActionEvent
 ):
+    """
+    General function to handle removal of a reaction from a message.
+
+    Args:
+        config (Configuration): App configuration
+        payload (RawReactionActionEvent): Payload information from reaction event
+    """
     config.watcher.logger.debug(
         f"Reaction removed: {payload.emoji.name}, "
         + f"from user: {payload.user_id}, Message ID: {payload.message_id} "

@@ -248,35 +248,52 @@ class ConfirmationView(discord.ui.View):
 
 
 async def evaluate_game(interaction: discord.Interaction, config: Configuration):
-    games = await get_games_w_status(config, [GameStatus.STOPPED])
-    select_view = GenGameSelectView(config, games)
-    await interaction.response.send_message(
-        "Which game would you like to evaluate and finish?",
-        view=select_view,
-        ephemeral=True,
-    )
-    chosen_game_id = await select_view.wait_for_selection()
-    if chosen_game_id is None:
-        await interaction.followup.send("No game selected.", ephemeral=True)
-        return
-    game = await get_game_from_id(config, chosen_game_id)
-    confirmation_view = ConfirmationView(config, game)
-    await interaction.followup.send(
-        content=f"You are sure to evaluate and finish the game with ID: {game.id}? "
-        + "This is not reversible!",
-        view=confirmation_view,
-        ephemeral=True,
-    )
-    await confirmation_view.wait()
+    """
+    Function to evaluate and finish a game. This function allows the user to select a game
+    that has been stopped and then confirms the evaluation of the game.
 
-    if not confirmation_view.result:
-        return
-
-    # Idee 1
-    match game.name:
-        case "Fast and hungry, task hunt":
-            await finish_game_1(config, game)
-        case _:
-            config.watcher.logger.error(
-                f"Game with ID {game.id} has an unknown name: {game.name}."
+    Args:
+        interaction (discord.Interaction): Interaction object to get the guild
+        config (Configuration): App configuration
+    """
+    config.watcher.logger.trace("evaluate_game called")
+    try:
+        games = await get_games_w_status(config, [GameStatus.STOPPED])
+        if not games:
+            await interaction.response.send_message(
+                "No games available to evaluate and finish.", ephemeral=True
             )
+            return
+        select_view = GenGameSelectView(config, games)
+        await interaction.response.send_message(
+            "Which game would you like to evaluate and finish?",
+            view=select_view,
+            ephemeral=True,
+        )
+        chosen_game_id = await select_view.wait_for_selection()
+        if chosen_game_id is None:
+            await interaction.followup.send("No game selected.", ephemeral=True)
+            return
+        game = await get_game_from_id(config, chosen_game_id)
+        confirmation_view = ConfirmationView(config, game)
+        await interaction.followup.send(
+            content=f"You are sure to evaluate and finish the game with ID: {game.id}? "
+            + "This is not reversible!",
+            view=confirmation_view,
+            ephemeral=True,
+        )
+        await confirmation_view.wait()
+
+        if not confirmation_view.result:
+            return
+
+        # Idee 1
+        match game.name:
+            case "Fast and hungry, task hunt":
+                await finish_game_1(config, game)
+            case _:
+                config.watcher.logger.error(
+                    f"Game with ID {game.id} has an unknown name: {game.name}."
+                )
+    except Exception as err:
+        print(f"Error during evaluate_game: {err}")

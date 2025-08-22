@@ -10,12 +10,7 @@ from discord import Interaction, errors
 from .game import MissingGameConfig, GameStats
 from .game import game_configs, failed_game, get_player_rank, create_quests
 from .configuration import Configuration
-from .db import (
-    Player,
-    Exercise,
-    Game,
-    Task,
-)
+from .db import Player, Exercise, Game, Task, ReactionStatus
 from .db import (
     get_random_tasks,
     process_player,
@@ -27,6 +22,7 @@ from .db import (
     balanced_task_mix_random,
     get_all_db_obj_from_id,
     get_all_game_x_player_from_message_id,
+    get_reaction,
 )
 
 
@@ -305,6 +301,68 @@ class UserSelectView(discord.ui.View):
         self.stop()
 
 
+# class PlayerGameDaysInput(
+#     discord.ui.Modal,
+#     title="Enter the final in-game days of the tournament and the days that each player survived.",
+# ):
+#     """
+#     PlayerGameDaysInput class for creating an input window for entering the final match days of
+#     the tournament and the players.
+#     """
+
+#     def __init__(self, config, player_list: List[Player], game: Game):
+#         super().__init__()
+#         self.player_list = player_list
+#         self.input_valid = True
+#         self.config = config
+#         self.add_item(
+#             discord.ui.TextInput(
+#                 label="Playing time (days)",
+#                 default="70",
+#                 placeholder="Enter the max. number of days played in the tournament or the final world days.",
+#                 required=True,
+#                 max_length=3,
+#             )
+#         )
+#         for player in player_list:
+#             self.add_item(
+#                 discord.ui.TextInput(
+#                     label=player.name,
+#                     default="0",
+#                     placeholder=f"Enter the number of days {player.name} has survived.",
+#                     required=True,
+#                     max_length=5,
+#                 )
+#             )
+
+#     async def on_submit(
+#         self, interaction: discord.Interaction
+#     ):  # pylint: disable=arguments-differ
+#         try:
+#             mapping = {child.label: child.value for child in self.children}
+#             print(f"Mapping: {mapping}")
+#             # for player in self.player_list:
+#             #     if not mapping[player.name].isdigit():
+#             #         self.input_valid = False
+#             #         break
+#             #     player.hours = mapping[player.name]
+#             # if not self.input_valid:
+#             #     await interaction.response.send_message(
+#             #         "Please enter only numbers for the playing days.",
+#             #         ephemeral=True,
+#             #     )
+#             #     return
+#             # await interaction.response.send_message(
+#             #     "All entries for the game and the players were error-free.",
+#             #     ephemeral=True,
+#             # )
+#             self.stop()
+#         except AttributeError as err:
+#             self.config.watcher.logger.error(
+#                 f"Error during on_submit in PlayerGameDaysInput: {err}"
+#             )
+
+
 async def game1(interaction: discord.Interaction, config: Configuration):
     """
     Command function to start a game with a user selection menu. This game is
@@ -473,8 +531,34 @@ async def initialize_game_1(
             f"An error occurred while starting the game: {err}. Please check the error log."
         )
 
+class PlayerGameDaysInput(discord.ui.Modal):
+    def __init__(self, config, player_list, game):
+        super().__init__(title="Spieltage eingeben")
+        self.config = config
+        self.player_list = player_list
+        self.game = game
 
-async def finish_game_1(config: Configuration, game: Game):
+        self.add_item(discord.ui.TextInput(label="Playing time (days)", default="70", max_length=3))
+        for player in player_list:
+            self.add_item(discord.ui.TextInput(label=player.name, default="0", max_length=5))
+
+    async def on_submit(self, interaction: discord.Interaction):
+        # Hier deine Validierung & Verarbeitung
+        await interaction.response.send_message("Eingaben wurden gespeichert!", ephemeral=True)
+
+class ModalButtonView(discord.ui.View):
+    def __init__(self, config, player_list, game):
+        super().__init__(timeout=None)
+        self.config = config
+        self.player_list = player_list
+        self.game = game
+
+    @discord.ui.button(label="Spieldauer eingeben", style=discord.ButtonStyle.primary)
+    async def open_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = PlayerGameDaysInput(self.config, self.player_list, self.game)
+        await interaction.response.send_modal(modal)
+
+async def finish_game_1(config: Configuration, game: Game, interaction: discord.Interaction):
     """
     Function to finish the game and update the game status.
 
@@ -495,7 +579,18 @@ async def finish_game_1(config: Configuration, game: Game):
         game_emojis = game_configs.get(game_x_player.name, []).game_emojis
         print(f"Game: {game.id} with players: {player_dc_ids}")
         print(f"game emojis: {game_emojis}")
-
+        for player_id in player_dc_ids:
+            reactions = await get_reaction(
+                config, game.message_id, player_id, ReactionStatus.REGISTERED
+            )
+            print(
+                f"Reactions for player {player_id}: {[reaction.id for reaction in reactions]}"
+            )
+        view = ModalButtonView(config, player, game)
+        await interaction.followup.send(
+                "Das Spiel wurde beendet. Klicke auf den Button, um die Spieldauer einzugeben:",
+                view=view,
+            )
     except Exception as err:
         config.watcher.logger.error(
             f"An error occurred while finishing the game: {err}"

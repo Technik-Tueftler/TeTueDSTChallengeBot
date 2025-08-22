@@ -290,7 +290,7 @@ async def evaluate_game(interaction: discord.Interaction, config: Configuration)
         # Idee 1
         match game.name:
             case "Fast and hungry, task hunt":
-                await finish_game_1(config, game)
+                await finish_game_1(config, game, interaction)
             case _:
                 config.watcher.logger.error(
                     f"Game with ID {game.id} has an unknown name: {game.name}."

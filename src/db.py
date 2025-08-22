@@ -698,7 +698,7 @@ async def insert_db_obj(config: Configuration, obj: Reaction) -> Reaction:
         config.watcher.logger.error(f"Database error: {str(err)}", exc_info=True)
 
 
-async def get_reaction(
+async def get_reaction_for_remove(
     config: Configuration, message_id: int, user_id: int, emoji_name: str
 ) -> Reaction | None:
     """
@@ -764,6 +764,34 @@ async def set_reaction_status(
                     reaction.status = status
                     reaction.last_modified = datetime.now()
                     session.add(reaction)
+
+
+async def get_reaction(
+    config: Configuration, message_id: int, user_id: int, status: ReactionStatus
+) -> Reaction | None:
+
+    config.watcher.logger.trace(
+        f"Get reaction for message ID: {message_id}, user ID: {user_id}, status: {status}"
+    )
+    try:
+        async with config.db.session() as session:
+            return (
+                (
+                    await session.execute(
+                        select(Reaction)
+                        .where(Reaction.message_id == message_id)
+                        .where(Reaction.dc_id == str(user_id))
+                        .where(Reaction.status == status)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+    except Exception as err:
+        config.watcher.logger.error(
+            f"Error getting reaction: {str(err)}", exc_info=True
+        )
+        return None
 
 
 async def sync_db(engine: AsyncEngine):

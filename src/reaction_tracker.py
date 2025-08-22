@@ -9,7 +9,7 @@ from .db import (
     insert_db_obj,
     get_all_db_obj_from_id,
     update_db_obj,
-    get_reaction,
+    get_reaction_for_remove,
     set_reaction_status,
 )
 from .db import Reaction, Player, GameStatus, ReactionStatus
@@ -168,7 +168,7 @@ async def schedule_reaction_tracker_remove(
         + f"from user: {payload.user_id}, Message ID: {payload.message_id} "
         + f"Channel ID {payload.channel_id}"
     )
-    reactions = await get_reaction(
+    reactions = await get_reaction_for_remove(
         config, payload.message_id, payload.user_id, payload.emoji.name
     )
     config.watcher.logger.debug(

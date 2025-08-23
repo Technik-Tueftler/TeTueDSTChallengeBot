@@ -169,27 +169,6 @@ class Game(Base):
         return f"ID: {self.id!r}"
 
 
-class Items(Base):
-    """Items table
-
-    Args:
-        Base (_type_): Basic class that is inherited
-    """
-
-    __tablename__ = "items"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(nullable=False)
-    type: Mapped[str] = mapped_column()
-    stackable: Mapped[int] = mapped_column()
-    floatable: Mapped[str] = mapped_column()
-    acquisition: Mapped[str] = mapped_column()
-    rating: Mapped[int] = mapped_column()
-    craftable: Mapped[str] = mapped_column()
-
-    def __repr__(self) -> str:
-        return f"Name: {self.name!r}, rate:{self.rating!r})"
-
-
 class Exercise(Base):
     """
     Exercise table

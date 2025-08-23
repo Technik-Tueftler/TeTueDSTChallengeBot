@@ -80,6 +80,9 @@ class GamePlayerAssociation(Base):
     player = relationship("Player", back_populates="games")
     quests = relationship("Quest", back_populates="gameplayerassociation")
     rank = relationship("Rank", back_populates="gameplayerassociation")
+    game1_player_results = relationship(
+        "Game1PlayerResult", back_populates="gameplayerassociation"
+    )
 
 
 class Player(Base):
@@ -164,6 +167,30 @@ class Game(Base):
     message_id: Mapped[int] = mapped_column(nullable=True)
     channel_id: Mapped[int] = mapped_column(nullable=True)
     players = relationship("GamePlayerAssociation", back_populates="game")
+
+    def __repr__(self) -> str:
+        return f"ID: {self.id!r}"
+
+
+class Game1PlayerResult(Base):
+    """Class table for game 1.
+
+    Args:
+        Base (_type_): Basic class that is inherited
+    """
+
+    __tablename__ = "game1_player_results"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    player_days: Mapped[int] = mapped_column(default=0)
+    total_tasks: Mapped[int] = mapped_column(default=0)
+    completed_tasks: Mapped[int] = mapped_column(default=0)
+    survived: Mapped[str] = mapped_column(nullable=False)
+    game_player_association_id: Mapped[int] = mapped_column(
+        ForeignKey("game_player_association.id")
+    )
+    gameplayerassociation = relationship(
+        "GamePlayerAssociation", back_populates="game1_player_results"
+    )
 
     def __repr__(self) -> str:
         return f"ID: {self.id!r}"

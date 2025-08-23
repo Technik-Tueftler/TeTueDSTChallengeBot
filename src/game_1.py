@@ -10,7 +10,15 @@ from discord import Interaction, errors
 from .game import MissingGameConfig, GameStats
 from .game import game_configs, failed_game, get_player_rank, create_quests
 from .configuration import Configuration
-from .db import Player, Exercise, Game, Task, ReactionStatus
+from .db import (
+    Player,
+    Exercise,
+    Game,
+    Task,
+    ReactionStatus,
+    Game1PlayerResult,
+    GamePlayerAssociation,
+)
 from .db import (
     get_random_tasks,
     process_player,
@@ -80,7 +88,7 @@ class ConfirmationView(discord.ui.View):
         """
         Callback function for the confirm button.
         """
-        await asyncio.sleep(2)
+        # await asyncio.sleep(2)
         await interaction.response.edit_message(
             content=f"Evaluation of the game with ID: {self.game.id} is finished. "
             + "Game status is also set to finished.",
@@ -531,34 +539,86 @@ async def initialize_game_1(
             f"An error occurred while starting the game: {err}. Please check the error log."
         )
 
+
 class PlayerGameDaysInput(discord.ui.Modal):
     def __init__(self, config, player_list, game):
-        super().__init__(title="Spieltage eingeben")
+        super().__init__(title="Enter game days and player survival days")
         self.config = config
         self.player_list = player_list
         self.game = game
-
-        self.add_item(discord.ui.TextInput(label="Playing time (days)", default="70", max_length=3))
+        self.input_valid = True
+        self.add_item(
+            discord.ui.TextInput(label="Game days", default="70", max_length=3)
+        )
         for player in player_list:
-            self.add_item(discord.ui.TextInput(label=player.name, default="0", max_length=5))
+            self.add_item(
+                discord.ui.TextInput(
+                    label=player.name,
+                    placeholder="Enter the days played here",
+                    default="0",
+                )
+            )
+            self.add_item(
+                discord.ui.TextInput(
+                    label=player.name + ": survived",
+                    placeholder="Enter here whether he survived",
+                    default="no",
+                )
+            )
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Hier deine Validierung & Verarbeitung
-        await interaction.response.send_message("Eingaben wurden gespeichert!", ephemeral=True)
+        # for player in self.player_list:
+        #     if not mapping[player.name].isdigit():
+        #         self.input_valid = False
+        #         break
+        #         player.hours = mapping[player.name]
+        #     if not self.input_valid:
+        #         await interaction.response.send_message(
+        #             "Please enter only numbers for the playing hours.",
+        #             ephemeral=True,
+        #         )
+        #         return
+        # TODO: Validierung der eingaben und erstellen des Game1PlayerResult Eintrags
+        # new_result = Game1PlayerResult(
+        #     player_days=10,
+        #     total_tasks=5,
+        #     completed_tasks=3,
+        #     survived=1,
+        #     gameplayerassociation=game_player_association  # setzt die Beziehung
+        # )
+        result = {child.label: child.value for child in self.children}
+        print(f"Result: {result}")
+        game_days = result.get("Game days")
+        self.config.watcher.logger.debug(f"Game (id: {self.game.id}) days: {game_days}")
+        for player in self.player_list:
+            self.config.watcher.logger.debug(
+                f"Player {player.name} survived {result[player.name]} days."
+            )
+        await interaction.response.send_message(
+            "Eingaben wurden gespeichert!", ephemeral=True
+        )
+
 
 class ModalButtonView(discord.ui.View):
-    def __init__(self, config, player_list, game):
+    def __init__(self, config: Configuration, player_list: list[Player], game: Game):
         super().__init__(timeout=None)
         self.config = config
         self.player_list = player_list
         self.game = game
 
-    @discord.ui.button(label="Spieldauer eingeben", style=discord.ButtonStyle.primary)
-    async def open_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = PlayerGameDaysInput(self.config, self.player_list, self.game)
-        await interaction.response.send_modal(modal)
+    @discord.ui.button(label="Submission", style=discord.ButtonStyle.primary)
+    async def open_modal(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        game_input = PlayerGameDaysInput(self.config, self.player_list, self.game)
+        await interaction.response.send_modal(game_input)
+        await game_input.wait()
+        self.stop()
 
-async def finish_game_1(config: Configuration, game: Game, interaction: discord.Interaction):
+
+async def finish_game_1(
+    config: Configuration, game: Game, interaction: discord.Interaction
+):
     """
     Function to finish the game and update the game status.
 
@@ -575,22 +635,25 @@ async def finish_game_1(config: Configuration, game: Game, interaction: discord.
             Player,
             [player.player_id for player in game_x_player.players],
         )
+
         player_dc_ids = [int(player.dc_id) for player in player]
         game_emojis = game_configs.get(game_x_player.name, []).game_emojis
-        print(f"Game: {game.id} with players: {player_dc_ids}")
-        print(f"game emojis: {game_emojis}")
+        config.watcher.logger.debug(f"Game: {game.id} with players: {player_dc_ids}")
+        config.watcher.logger.debug(f"Game emojis: {game_emojis}")
         for player_id in player_dc_ids:
             reactions = await get_reaction(
                 config, game.message_id, player_id, ReactionStatus.REGISTERED
             )
-            print(
-                f"Reactions for player {player_id}: {[reaction.id for reaction in reactions]}"
+            config.watcher.logger.debug(
+                f"Reactions for DC_ID: {player_id}: {[reaction.id for reaction in reactions]}"
             )
         view = ModalButtonView(config, player, game)
         await interaction.followup.send(
-                "Das Spiel wurde beendet. Klicke auf den Button, um die Spieldauer einzugeben:",
-                view=view,
-            )
+            "The game is now evaluated using the key data of the game and the players.",
+            view=view,
+            ephemeral=True,
+        )
+        await view.wait()
     except Exception as err:
         config.watcher.logger.error(
             f"An error occurred while finishing the game: {err}"

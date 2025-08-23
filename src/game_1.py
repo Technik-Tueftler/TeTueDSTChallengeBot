@@ -17,8 +17,6 @@ from .db import (
     Task,
     ReactionStatus,
     Game1PlayerResult,
-    GamePlayerAssociation,
-    get_game_player_association,
 )
 from .db import (
     get_random_tasks,
@@ -32,6 +30,8 @@ from .db import (
     get_all_db_obj_from_id,
     get_all_game_x_player_from_message_id,
     get_reaction,
+    get_game_player_association,
+    update_db_objs,
 )
 
 
@@ -568,59 +568,70 @@ class PlayerGameDaysInput(discord.ui.Modal):
             )
 
     async def on_submit(self, interaction: discord.Interaction):
-        result = {child.label: child.value for child in self.children}
-        player_results = []
-        if not result["Game days"].isdigit():
+        try:
+            result = {child.label: child.value for child in self.children}
+            player_results = []
+            if not result["Game days"].isdigit():
+                await interaction.response.send_message(
+                    "Please enter only numbers for the game days.",
+                    ephemeral=True,
+                )
+                self.config.watcher.logger.debug("Invalid input in modal for game days")
+                return
+            for player in self.player_list:
+                self.config.watcher.logger.debug(
+                    f"Player {player.name} survived {result[player.name]} days."
+                )
+                if not result[player.name].isdigit():
+                    self.input_valid = False
+                    break
+                if not result[player.name + ": survived"] in ["yes", "no"]:
+                    self.input_valid = False
+                    break
+                if int(result[player.name]) > int(result["Game days"]):
+                    self.input_valid = False
+                    break
+                game_player_association = await get_game_player_association(
+                    self.config, self.game.id, player.id
+                )
+                reactions = await get_reaction(
+                    self.config,
+                    self.game.message_id,
+                    player.dc_id,
+                    ReactionStatus.REGISTERED,
+                )
+                if not reactions:
+                    comp_tasks = 0
+                else:
+                    comp_tasks = len(reactions)
+                player_result = Game1PlayerResult(
+                    player_days=int(result[player.name]),
+                    total_tasks=5,
+                    completed_tasks=comp_tasks,
+                    survived=result[player.name + ": survived"],
+                    gameplayerassociation=game_player_association,
+                )
+                player_results.append(player_result)
+            if not self.input_valid:
+                await interaction.response.send_message(
+                    "Please enter only numbers for the playing days and 'yes' or 'no' for survived."
+                    + " Furthermore, players game days cannot be greater than the game days.",
+                    ephemeral=True,
+                )
+                self.config.watcher.logger.debug(
+                    "Invalid input in modal for player days"
+                )
+                return
+            self.game.playing_days = int(result["Game days"])
+            await update_db_obj(self.config, self.game)
+            await update_db_objs(self.config, player_results)
             await interaction.response.send_message(
-                "Please enter only numbers for the game days.",
-                ephemeral=True,
+                "Eingaben wurden gespeichert!", ephemeral=True
             )
-            self.config.watcher.logger.debug("Invalid input in modal for game days")
-            return
-
-        for player in self.player_list:
-            self.config.watcher.logger.debug(
-                f"Player {player.name} survived {result[player.name]} days."
+        except Exception as err:
+            self.config.watcher.logger.error(
+                f"Error during on_submit in PlayerGameDaysInput: {err}"
             )
-            if not result[player.name].isdigit():
-                self.input_valid = False
-                break
-            if not result[player.name + ": survived"] in ["yes", "no"]:
-                self.input_valid = False
-                break
-            game_player_association = get_game_player_association(
-                self.config, self.game.id, player.id
-            )
-            reactions = await get_reaction(
-                self.config,
-                self.game.message_id,
-                player.dc_id,
-                ReactionStatus.REGISTERED,
-            )
-            if not reactions:
-                comp_tasks = 0
-            else:
-                comp_tasks = len(reactions)
-            player_result = Game1PlayerResult(
-                player_days=int(result[player.name]),
-                total_tasks=5,
-                completed_tasks=comp_tasks,
-                survived=result[player.name + ": survived"],
-                gameplayerassociation=game_player_association,
-            )
-            player_results.append(player_result)
-        if not self.input_valid:
-            await interaction.response.send_message(
-                "Please enter only numbers for the playing days and 'yes' or 'no' for survived.",
-                ephemeral=True,
-            )
-            self.config.watcher.logger.debug("Invalid input in modal for player days")
-            return
-
-        # TODO: alle objekte in die DB schreiben bzw. game aktualiseren.
-        await interaction.response.send_message(
-            "Eingaben wurden gespeichert!", ephemeral=True
-        )
 
 
 class ModalButtonView(discord.ui.View):

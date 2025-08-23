@@ -234,7 +234,7 @@ class ConfirmationView(discord.ui.View):
         """
         Callback function for the confirm button.
         """
-        await asyncio.sleep(2)
+        # await asyncio.sleep(2)
         self.result = True
         await interaction.response.edit_message(
             content=f"Evaluation of the game with ID: {self.game.id} started",

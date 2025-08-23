@@ -696,6 +696,26 @@ async def update_db_obj(
             return obj
 
 
+async def update_db_objs(
+    config: Configuration, objs: list[Game | Player | Exercise | Reaction | Game1PlayerResult]
+) -> None:
+    """
+    Function to update a game or player object in the database
+
+    Args:
+        config (_type_): configuration
+        obj (Game | Player | Exercise | Reaction): Object to update in the database
+    """
+    async with config.db.write_lock:
+        async with config.db.session() as session:
+            async with session.begin():
+                session.add_all(objs)
+                for obj in objs:
+                    config.watcher.logger.trace(
+                        f"Updated object in database: {obj.__class__.__name__} with ID: {obj.id}"
+                    )
+
+
 async def insert_db_obj(config: Configuration, obj: Reaction) -> Reaction:
     """
     Fuction to insert a new handed over object into the database and return the object.

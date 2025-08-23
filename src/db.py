@@ -394,6 +394,21 @@ async def create_game(config, game_name: str, player: list[Player]) -> Game:
         config.watcher.logger.error(f"Database error: {str(err)}", exc_info=True)
 
 
+async def get_game_player_association(
+    config: Configuration, game_id: int, player_id: int
+) -> GamePlayerAssociation | None:
+    async with config.db.session() as session:
+        async with session.begin():
+            game_player_association = (
+                await session.execute(
+                    select(GamePlayerAssociation)
+                    .where(GamePlayerAssociation.game_id == game_id)
+                    .where(GamePlayerAssociation.player_id == player_id)
+                )
+            ).scalar_one_or_none()
+    return game_player_association
+
+
 async def get_games_w_status(
     config: Configuration, status: list[GameStatus]
 ) -> list[Game]:
@@ -662,14 +677,14 @@ async def get_all_db_obj_from_id(
 
 
 async def update_db_obj(
-    config: Configuration, obj: Game | Player | Exercise | Reaction
-) -> None:
+    config: Configuration, obj: Game | Player | Exercise | Reaction | Game1PlayerResult
+) -> Game | Player | Exercise | Reaction | Game1PlayerResult:
     """
     Function to update a game or player object in the database
 
     Args:
         config (_type_): configuration
-        obj (Game | Player): Object to update in the database
+        obj (Game | Player | Exercise | Reaction): Object to update in the database
     """
     async with config.db.write_lock:
         async with config.db.session() as session:
@@ -678,6 +693,7 @@ async def update_db_obj(
                 config.watcher.logger.trace(
                     f"Updated object in database: {obj.__class__.__name__} with ID: {obj.id}"
                 )
+            return obj
 
 
 async def insert_db_obj(config: Configuration, obj: Reaction) -> Reaction:

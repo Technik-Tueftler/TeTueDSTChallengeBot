@@ -32,6 +32,9 @@ from .db import (
     get_reaction,
     get_game_player_association,
     update_db_objs,
+    get_game_player_associations_from_id,
+    get_game1_player_results_from_id,
+    determine_ranks_game_1
 )
 
 
@@ -626,7 +629,7 @@ class PlayerGameDaysInput(discord.ui.Modal):
             await update_db_obj(self.config, self.game)
             await update_db_objs(self.config, player_results)
             await interaction.response.send_message(
-                "Eingaben wurden gespeichert!", ephemeral=True
+                "All inputs have been saved.", ephemeral=True
             )
         except Exception as err:
             self.config.watcher.logger.error(
@@ -689,6 +692,20 @@ async def finish_game_1(
             ephemeral=True,
         )
         await view.wait()
+        game_player_associations = await get_game_player_associations_from_id(
+            config, Game, [game.id]
+        )
+        if not game_player_associations:
+            config.watcher.logger.error(
+                f"No game player associations found for game ID: {game.id}"
+            )
+            return
+        game1_player_results = await get_game1_player_results_from_id(config, game_player_associations)
+        temp = await determine_ranks_game_1(config, game.id)
+        for t in temp:
+            player = t.gameplayerassociation.player
+            print(f"Spieler: {player.name}, Result: {t.completed_tasks}")
+
     except Exception as err:
         config.watcher.logger.error(
             f"An error occurred while finishing the game: {err}"

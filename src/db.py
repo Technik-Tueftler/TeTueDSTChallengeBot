@@ -1,10 +1,9 @@
 """All database related functions are here."""
-
 import random
 from enum import Enum
 from typing import Set
 from datetime import datetime
-from sqlalchemy import ForeignKey, func
+from sqlalchemy import ForeignKey, func, case, desc
 from sqlalchemy import Enum as AlchemyEnum
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -12,6 +11,7 @@ from sqlalchemy.orm import (
     mapped_column,
     relationship,
     joinedload,
+    selectinload
 )
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.future import select
@@ -697,7 +697,8 @@ async def update_db_obj(
 
 
 async def update_db_objs(
-    config: Configuration, objs: list[Game | Player | Exercise | Reaction | Game1PlayerResult]
+    config: Configuration,
+    objs: list[Game | Player | Exercise | Reaction | Game1PlayerResult],
 ) -> None:
     """
     Function to update a game or player object in the database
@@ -710,6 +711,7 @@ async def update_db_objs(
         async with config.db.session() as session:
             async with session.begin():
                 session.add_all(objs)
+                await session.flush()
                 for obj in objs:
                     config.watcher.logger.trace(
                         f"Updated object in database: {obj.__class__.__name__} with ID: {obj.id}"
@@ -835,6 +837,70 @@ async def get_reaction(
         )
         return None
 
+
+async def get_game_player_associations_from_id(
+    config: Configuration, search_class: Game | Player, ids: list[int]
+) -> list[GamePlayerAssociation]:
+    """
+    Function to get all game player associations based on a list of game or player IDs.
+
+    Args:
+        config (Configuration): App configuration
+        search_class (Game | Player): Class to search for (Game or Player)
+        ids (list[int]): List of IDs to search for
+
+    Returns:
+        list[GamePlayerAssociation]: List of GamePlayerAssociation objects
+    """
+    async with config.db.session() as session:
+        async with session.begin():
+            if search_class == Game:
+                result = await session.execute(
+                    select(GamePlayerAssociation).where(
+                        GamePlayerAssociation.game_id.in_(ids)
+                    )
+                )
+            else:
+                result = await session.execute(
+                    select(GamePlayerAssociation).where(
+                        GamePlayerAssociation.player_id.in_(ids)
+                    )
+                )
+    return result.scalars().all()
+
+
+async def get_game1_player_results_from_id(
+    config: Configuration, ids: list[int]
+    ) -> list[Game1PlayerResult]:
+    """
+    Function to get all game 1 player results based on a list of game player association IDs
+    Args:
+        config (Configuration): App configuration
+        ids (list[int]): List of game player association IDs
+    """
+    async with config.db.session() as session:
+        return (
+            (
+                await session.execute(
+                    select(Game1PlayerResult)
+                    .where(Game1PlayerResult.game_player_association_id.in_(ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+
+async def determine_ranks_game_1(config: Configuration, game_id: int) -> list[Game1PlayerResult]:
+    async with config.db.session() as session:
+        query = (
+            select(Game1PlayerResult)
+            .join(GamePlayerAssociation, Game1PlayerResult.game_player_association_id == GamePlayerAssociation.id)
+            .join(Player, GamePlayerAssociation.player_id == Player.id)
+            .where(GamePlayerAssociation.game_id == game_id)
+            .options(selectinload(Game1PlayerResult.gameplayerassociation).selectinload(GamePlayerAssociation.player))
+        )
+        return (await session.execute(query)).scalars().all()
 
 async def sync_db(engine: AsyncEngine):
     """

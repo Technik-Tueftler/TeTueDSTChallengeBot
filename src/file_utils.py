@@ -2,11 +2,12 @@
 Here are all the functions needed to import and synchronize important game
 information from the game master.
 """
-
+import os
 from pathlib import Path
 from datetime import datetime
 import discord
 import pandas as pd
+from pandas.errors import EmptyDataError, ParserError
 from sqlalchemy.future import select
 from .configuration import Configuration
 from .db import Task
@@ -78,6 +79,9 @@ async def import_tasks(interaction: discord.Interaction, config: Configuration):
         config (Configuration): App configuration
     """
     try:
+        config.watcher.logger.debug("Reading tasks from file")
+        config.watcher.logger.debug(f"File path: {config.game.input_task_path}")
+        config.watcher.logger.debug(f"Working directory: {os.getcwd()}")
         new_tasks = []
         failed_rows = []
         updated_rows = []
@@ -117,7 +121,12 @@ async def import_tasks(interaction: discord.Interaction, config: Configuration):
                 f"{", ".join(str(x+2) for x in updated_rows)}."
             )
         await interaction.response.send_message(message, ephemeral=True)
-    except (KeyError, TypeError) as err:
+
+    except (FileNotFoundError, PermissionError, OSError) as err:
+        config.watcher.logger.error(f"Error accessing the file: {err}")
+    except (EmptyDataError, ParserError) as err:
+        config.watcher.logger.error(f"Error reading the Excel file: {err}")
+    except (KeyError, TypeError, ValueError) as err:
         config.watcher.logger.error(f"Validation error: {err}")
 
 
@@ -130,6 +139,9 @@ async def export_tasks(interaction: discord.Interaction, config: Configuration):
         config (Configuration): App configuration
     """
     try:
+        config.watcher.logger.debug("Exporting tasks from file")
+        config.watcher.logger.debug(f"File path: {config.game.export_task_path}")
+        config.watcher.logger.debug(f"Working directory: {os.getcwd()}")
         async with config.db.session() as session:
             async with session.begin():
                 tasks = (await session.execute(select(Task))).scalars().all()

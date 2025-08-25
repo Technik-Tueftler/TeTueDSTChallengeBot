@@ -4,11 +4,12 @@ The bot is implemented using the discord.py library and provides a simple comman
 """
 
 import discord
-from discord.ext import commands
-from .discord_setup_game import setup_game
+from discord.ext import commands, tasks
+from .game_setup import setup_game, evaluate_game
 from .file_utils import import_tasks, export_tasks
 from .game_1 import practice_game1, game1
-# from .game import show_league_table
+from .game import show_league_table
+from .reaction_tracker import schedule_reaction_tracker_add, schedule_reaction_tracker_remove
 
 
 class DiscordBot:
@@ -22,13 +23,29 @@ class DiscordBot:
         self.config = config
         intents = discord.Intents.default()
         intents.members = True
+        intents.message_content = True
+        intents.reactions = True
         self.bot = commands.Bot(command_prefix="!", intents=intents)
 
         @self.bot.event
         async def on_ready():
             await self.on_ready()
 
+        @self.bot.event
+        async def on_raw_reaction_add(payload):
+            if payload.user_id == self.bot.user.id:
+                return
+            await schedule_reaction_tracker_add(self.bot, self.config, payload)
+
+        @self.bot.event
+        async def on_raw_reaction_remove(payload):
+            # Not possible to check if the bot is the user who removed the reaction
+            # if payload.user_id == self.bot.user.id:
+            #     return
+            await schedule_reaction_tracker_remove(self.config, payload)
+
         self.register_commands()
+
 
     async def start(self):
         """
@@ -41,12 +58,14 @@ class DiscordBot:
         """
         Event function to print a message when the bot is online.
         """
-        print(f"{self.bot.user} ist online")
+        self.config.watcher.logger.info(f"{self.bot.user} ist online")
         synced = await self.bot.tree.sync()
-        print(f"Slash Commands synchronisiert: {len(synced)}")
+        self.config.watcher.logger.info(f"Slash Commands synchronisiert: {len(synced)}")
         await self.bot.change_presence(
             status=discord.Status.online, activity=discord.Game("Don't Starve Together")
         )
+        self.config.watcher.logger.info("start reaction tracker")
+        self.reaction_tracker.start()
 
     def register_commands(self):
         """
@@ -57,8 +76,8 @@ class DiscordBot:
         async def wrapped_game1_command(interaction: discord.Interaction):
             await game1(interaction, self.config)
 
-        # async def wrapped_game1_evaluate(interaction: discord.Interaction):
-        #     await game1_evaluate(interaction, self.config)
+        async def wrapped_evaluate_game(interaction: discord.Interaction):
+            await evaluate_game(interaction, self.config)
 
         async def wrapped_practice_game1_command(interaction: discord.Interaction):
             await practice_game1(interaction, self.config)
@@ -66,8 +85,8 @@ class DiscordBot:
         async def wrapped_setup_game(interaction: discord.Interaction):
             await setup_game(interaction, self.config)
 
-        # async def wrapped_show_league_table(interaction: discord.Interaction):
-        #     await show_league_table(interaction, self.config)
+        async def wrapped_show_league_table(interaction: discord.Interaction):
+            await show_league_table(interaction, self.config)
 
         async def wrapped_import_tasks(interaction: discord.Interaction):
             await import_tasks(interaction, self.config)
@@ -83,13 +102,12 @@ class DiscordBot:
             ),
         )(wrapped_game1_command)
 
-        # self.bot.tree.command(
-        #     name="evaluate_fast_and_hungry_task_hunt",
-        #     description=(
-        #         "Evaluate the game 'Fast and hungry, task hunt'. "
-        #         "Check all reaktions and calculate the winner."
-        #     ),
-        # )(wrapped_game1_evaluate)
+        self.bot.tree.command(
+            name="evaluate_game",
+            description=(
+                "Evaluate the game, check all reaktions and calculate the winner."
+            ),
+        )(wrapped_evaluate_game)
 
         self.bot.tree.command(
             name="prac_fast_and_hungry_task_hunt",
@@ -104,10 +122,10 @@ class DiscordBot:
             description="Switch game state to specific status like running, paused, finished, etc.",
         )(wrapped_setup_game)
 
-        # self.bot.tree.command(
-        #     name="show_league_table",
-        #     description="Show the current league table with all players and their scores.",
-        # )(wrapped_show_league_table)
+        self.bot.tree.command(
+            name="show_league_table",
+            description="Show the current league table with all players and their scores.",
+        )(wrapped_show_league_table)
 
         self.bot.tree.command(
             name="import_tasks",
@@ -118,3 +136,18 @@ class DiscordBot:
             name="export_tasks",
             description="Export current tasks from database to an Excel spreadsheet.",
         )(wrapped_export_tasks)
+
+    @tasks.loop(seconds=10)
+    async def reaction_tracker(self):
+        """
+        Experimental reaction tracker task that checks for reactions
+        """
+        # await schedule_reaction_tracker(self.bot, self.config)
+
+
+    @reaction_tracker.before_loop
+    async def init_reaction_tracker(self):
+        """
+        Function to initialize the reaction tracker before it starts.
+        """
+        await self.bot.wait_until_ready()

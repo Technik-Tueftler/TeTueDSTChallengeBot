@@ -1,16 +1,43 @@
+# pylint: disable=too-many-lines
 """All database related functions are here."""
-
+import asyncio
 import random
 from enum import Enum
 from typing import Set
 from datetime import datetime
-from sqlalchemy import ForeignKey, func
+from sqlalchemy import ForeignKey, func, case, desc, delete
 from sqlalchemy import Enum as AlchemyEnum
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+    joinedload,
+    selectinload,
+)
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.future import select
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from sqlalchemy.exc import (
+    DBAPIError,
+    InvalidRequestError,
+    StatementError,
+    IntegrityError,
+    OperationalError,
+    SQLAlchemyError,
+)
 from .configuration import Configuration
+
+
+class ReactionStatus(Enum):
+    """Enum for reaction status"""
+
+    NEW: int = 0
+    DELETED_STATUS: int = 1
+    DELETED_PLAYER: int = 2
+    REGISTERED: int = 3
+    SUPPORTER: int = 4
+    REMOVED: int = 5
+    REVIEW: int = 6
 
 
 class GameStatus(Enum):
@@ -21,6 +48,7 @@ class GameStatus(Enum):
     PAUSED: int = 2
     STOPPED: int = 3
     FINISHED: int = 4
+    FAILURE: int = 5
 
     @property
     def icon(self):
@@ -61,6 +89,9 @@ class GamePlayerAssociation(Base):
     player = relationship("Player", back_populates="games")
     quests = relationship("Quest", back_populates="gameplayerassociation")
     rank = relationship("Rank", back_populates="gameplayerassociation")
+    game1_player_results = relationship(
+        "Game1PlayerResult", back_populates="gameplayerassociation"
+    )
 
 
 class Player(Base):
@@ -95,7 +126,9 @@ class League(Base):
     points: Mapped[int] = mapped_column(nullable=False)
     player_id: Mapped[int] = mapped_column(ForeignKey("players.id"))
     survived: Mapped[int] = mapped_column(nullable=False)
-    player: Mapped[Player] = relationship("Player", back_populates="league")
+    player: Mapped[Player] = relationship(
+        "Player", back_populates="league", lazy="joined"
+    )
 
     def __repr__(self) -> str:
         return (
@@ -140,32 +173,36 @@ class Game(Base):
     )
     playing_days: Mapped[int] = mapped_column(default=70)
     timestamp: Mapped[datetime] = mapped_column(nullable=False)
-    message_id: Mapped[str] = mapped_column(nullable=True)
+    message_id: Mapped[int] = mapped_column(nullable=True)
+    channel_id: Mapped[int] = mapped_column(nullable=True)
     players = relationship("GamePlayerAssociation", back_populates="game")
 
     def __repr__(self) -> str:
         return f"ID: {self.id!r}"
 
 
-class Items(Base):
-    """Items table
+class Game1PlayerResult(Base):
+    """Class table for game 1.
 
     Args:
         Base (_type_): Basic class that is inherited
     """
 
-    __tablename__ = "items"
+    __tablename__ = "game1_player_results"
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(nullable=False)
-    type: Mapped[str] = mapped_column()
-    stackable: Mapped[int] = mapped_column()
-    floatable: Mapped[str] = mapped_column()
-    acquisition: Mapped[str] = mapped_column()
-    rating: Mapped[int] = mapped_column()
-    craftable: Mapped[str] = mapped_column()
+    player_days: Mapped[int] = mapped_column(default=0)
+    total_tasks: Mapped[int] = mapped_column(default=0)
+    completed_tasks: Mapped[int] = mapped_column(default=0)
+    survived: Mapped[str] = mapped_column(nullable=False)
+    game_player_association_id: Mapped[int] = mapped_column(
+        ForeignKey("game_player_association.id")
+    )
+    gameplayerassociation = relationship(
+        "GamePlayerAssociation", back_populates="game1_player_results"
+    )
 
     def __repr__(self) -> str:
-        return f"Name: {self.name!r}, rate:{self.rating!r})"
+        return f"ID: {self.id!r}"
 
 
 class Exercise(Base):
@@ -231,6 +268,30 @@ class Task(Base):
         return f"Name: {self.name!r}, rate:{self.rating!r})"
 
 
+class Reaction(Base):
+    """Reaction table
+
+    Args:
+        Base (_type_): Basic class that is inherited
+    """
+
+    __tablename__ = "reactions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    dc_id: Mapped[str] = mapped_column(nullable=False)
+    status: Mapped[ReactionStatus] = mapped_column(
+        AlchemyEnum(ReactionStatus), default=ReactionStatus.NEW
+    )
+    timestamp: Mapped[datetime] = mapped_column(nullable=False)
+    last_modified: Mapped[datetime] = mapped_column(nullable=True)
+    message_id: Mapped[int] = mapped_column(nullable=False)
+    channel_id: Mapped[int] = mapped_column(nullable=False)
+    emoji: Mapped[str] = mapped_column(nullable=False)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id"), nullable=True)
+
+    def __repr__(self) -> str:
+        return f"ID: {self.id!r}, status:{self.status!r})"
+
+
 async def get_player(config, player_id: int) -> Player | None:
     """
     Function to get a player from the database by dc_id
@@ -284,36 +345,39 @@ async def process_player(
         list[Player]: processed player list
     """
     processed_player_list = []
-    async with config.db.session() as session:
-        for p in player_list:
-            async with session.begin():
-                player = (
-                    await session.execute(
-                        select(Player).filter(Player.dc_id == p.dc_id)
-                    )
-                ).scalar_one_or_none()
-                if player is None:
-                    session.add(p)
-                    # Nicht benötigt da Transaktionsblock .begin() auto. mit commit beendet wird
-                    # await session.commit()
-                    processed_player_list.append(p)
-                    config.watcher.logger.info(
-                        f"Player {p.name} added to the database."
-                    )
-                else:
-                    if p.hours != 0:
-                        player.hours = p.hours
+    async with config.db.write_lock:
+        async with config.db.session() as session:
+            for p in player_list:
+                async with session.begin():
+                    player = (
+                        await session.execute(
+                            select(Player).filter(Player.dc_id == p.dc_id)
+                        )
+                    ).scalar_one_or_none()
+                    if player is None:
+                        session.add(p)
+                        # Nicht benötigt da Transaktionsblock .begin() auto. mit commit beendet wird
                         # await session.commit()
-                    processed_player_list.append(player)
+                        processed_player_list.append(p)
+                        config.watcher.logger.info(
+                            f"Player {p.name} added to the database."
+                        )
+                    else:
+                        if p.hours != 0:
+                            player.hours = p.hours
+                            # await session.commit()
+                        processed_player_list.append(player)
     return processed_player_list
 
 
-async def create_game(config, game_name: str, player: list[Player]) -> Game:
+async def create_game(
+    config: Configuration, game_name: str, player: list[Player]
+) -> Game:
     """
     Function to create a game in the database and link all players to the game.
 
     Args:
-        config (_type_): _description_
+        config (Configuration): App configuration
         game_name (str): Game name
         player (list[Player]): All players in the game
 
@@ -321,26 +385,55 @@ async def create_game(config, game_name: str, player: list[Player]) -> Game:
         Game: Object of the created game for further processing
     """
     try:
-        async with config.db.session() as session:
-            async with session.begin():
-                game = Game(
-                    name=game_name,
-                    timestamp=datetime.now(),
-                )
-                session.add(game)
-                associations = [
-                    GamePlayerAssociation(game=game, player=p) for p in player
-                ]
-                session.add_all(associations)
-            await session.refresh(game)
-            return game
+        async with config.db.write_lock:
+            async with config.db.session() as session:
+                async with session.begin():
+                    game = Game(
+                        name=game_name,
+                        timestamp=datetime.now(),
+                    )
+                    session.add(game)
+                    associations = [
+                        GamePlayerAssociation(game=game, player=p) for p in player
+                    ]
+                    session.add_all(associations)
+                await session.refresh(game)
+                return game
     except IntegrityError as err:
         config.watcher.logger.error(f"Integrity error {str(err)}")
     except SQLAlchemyError as err:
         config.watcher.logger.error(f"Database error: {str(err)}", exc_info=True)
 
 
-async def get_changeable_games(config: Configuration) -> list[Game]:
+async def get_game_player_association(
+    config: Configuration, game_id: int, player_id: int
+) -> GamePlayerAssociation | None:
+    """
+    Funktion to get a game player association from the database by game id and player id.
+
+    Args:
+        config (Configuration): App configuration
+        game_id (int): Game ID
+        player_id (int): Player ID
+
+    Returns:
+        GamePlayerAssociation | None: Object of the game player association or None if not found
+    """
+    async with config.db.session() as session:
+        async with session.begin():
+            game_player_association = (
+                await session.execute(
+                    select(GamePlayerAssociation)
+                    .where(GamePlayerAssociation.game_id == game_id)
+                    .where(GamePlayerAssociation.player_id == player_id)
+                )
+            ).scalar_one_or_none()
+    return game_player_association
+
+
+async def get_games_w_status(
+    config: Configuration, status: list[GameStatus]
+) -> list[Game]:
     """
     This function get all changeable games back. Games that have the status
     CREATED, RUNNING or PAUSED can be changed.
@@ -351,19 +444,37 @@ async def get_changeable_games(config: Configuration) -> list[Game]:
     Returns:
         list[Game]: The list if changeable games
     """
+    config.watcher.logger.trace(f"games_w_status called with {status}")
+    async with config.db.session() as session:
+        async with session.begin():
+            games = (
+                (await session.execute(select(Game).where(Game.status.in_(status))))
+                .scalars()
+                .all()
+            )
+    return games
+
+
+async def get_games_f_reaction(config: Configuration) -> list[Game] | None:
+    """
+    _summary_
+
+    Args:
+        config (Configuration): app configuration
+
+    Returns:
+        list[Game] | None: valid games to track reactions or None if no games found
+    """
     async with config.db.session() as session:
         async with session.begin():
             games = (
                 (
                     await session.execute(
                         select(Game).where(
-                            Game.status.in_(
-                                [
-                                    GameStatus.CREATED,
-                                    GameStatus.RUNNING,
-                                    GameStatus.PAUSED,
-                                ]
-                            )
+                            Game.status.not_in(
+                                [GameStatus.FINISHED, GameStatus.STOPPED]
+                            ),
+                            Game.channel_id.is_not(None),
                         )
                     )
                 )
@@ -541,17 +652,346 @@ async def balanced_task_mix_random(
         return []
 
 
-async def update_db_obj(config: Configuration, obj: Game | Player | Exercise) -> None:
+async def get_all_game_x_player_from_message_id(
+    config: Configuration, message_id: int
+) -> Game | None:
+    """
+    Function get all games based on message_id with join off all players in the game.
+
+    Args:
+        config (Configuration): App configuration
+        message_id (int): Message ID from Game
+
+    Returns:
+        list[Game]: All games with players based on message_id
+    """
+    async with config.db.session() as session:
+        async with session.begin():
+            result = await session.execute(
+                select(Game)
+                .options(
+                    joinedload(Game.players).joinedload(GamePlayerAssociation.player)
+                )
+                .where(Game.message_id == message_id)
+            )
+    # return result.unique().scalars().all()
+    return result.unique().scalar_one_or_none()
+
+
+async def get_all_db_obj_from_id(
+    config: Configuration, obj: Player, ids: list[int]
+) -> list[Player]:
+    """
+    Function returns all objects from database based on given IDs from handed over object class.
+
+    Args:
+        config (Configuration): App configuration
+        obj (Player): Object class to get from database
+        ids (list[int]): List of IDs to get from database
+
+    Returns:
+        list[Player]: List of objects from database based on IDs and handed over class
+    """
+    async with config.db.session() as session:
+        async with session.begin():
+            result = await session.execute(select(obj).where(obj.id.in_(ids)))
+    return result.scalars().all()
+
+
+async def update_db_obj(
+    config: Configuration, obj: Game | Player | Exercise | Reaction | Game1PlayerResult
+) -> Game | Player | Exercise | Reaction | Game1PlayerResult:
     """
     Function to update a game or player object in the database
 
     Args:
         config (_type_): configuration
-        obj (Game | Player): Object to update in the database
+        obj (Game | Player | Exercise | Reaction): Object to update in the database
+    """
+    async with config.db.write_lock:
+        async with config.db.session() as session:
+            async with session.begin():
+                session.add(obj)
+                config.watcher.logger.trace(
+                    f"Updated object in database: {obj.__class__.__name__} with ID: {obj.id}"
+                )
+            return obj
+
+
+async def update_db_objs(
+    config: Configuration,
+    objs: list[Game | Player | Exercise | Reaction | Game1PlayerResult | Rank],
+) -> None:
+    """
+    Function to update a game or player object in the database
+
+    Args:
+        config (_type_): configuration
+        obj (Game | Player | Exercise | Reaction): Object to update in the database
+    """
+    async with config.db.write_lock:
+        async with config.db.session() as session:
+            async with session.begin():
+                session.add_all(objs)
+                await session.flush()
+                for obj in objs:
+                    config.watcher.logger.trace(
+                        f"Updated object in database: {obj.__class__.__name__} with ID: {obj.id}"
+                    )
+
+
+async def insert_db_obj(config: Configuration, obj: Reaction) -> Reaction:
+    """
+    Fuction to insert a new handed over object into the database and return the object.
+
+    Args:
+        config (Configuration): App configuration
+        obj (Reaction): Handed over object to insert into the database
+
+    Returns:
+        Reaction: Inserted and updated object
+    """
+    try:
+        async with config.db.write_lock:
+            async with config.db.session() as session:
+                async with session.begin():
+                    session.add(obj)
+                await session.refresh(obj)
+                return obj
+    except IntegrityError as err:
+        config.watcher.logger.error(f"Integrity error {str(err)}")
+    except SQLAlchemyError as err:
+        config.watcher.logger.error(f"Database error: {str(err)}", exc_info=True)
+
+
+async def get_reaction_for_remove(
+    config: Configuration, message_id: int, user_id: int, emoji_name: str
+) -> Reaction | None:
+    """
+    Get all reactions for a given message ID, user ID and emoji name.
+
+    Args:
+        config (Configuration): App configuration
+        message_id (int): Message ID to search for
+        user_id (int): User ID to search for
+        emoji_name (str): Emoji to search for
+
+    Returns:
+        Reaction | None: Reaction object if found, otherwise None
+    """
+    config.watcher.logger.trace(
+        f"Get reaction for message ID: {message_id}, user ID: {user_id}, emoji: {emoji_name}"
+    )
+    try:
+        async with config.db.session() as session:
+            return (
+                (
+                    await session.execute(
+                        select(Reaction)
+                        .where(Reaction.message_id == message_id)
+                        .where(Reaction.dc_id == str(user_id))
+                        .where(Reaction.emoji == emoji_name)
+                        .where(
+                            Reaction.status.not_in(
+                                [
+                                    ReactionStatus.DELETED_STATUS,
+                                    ReactionStatus.DELETED_PLAYER,
+                                    ReactionStatus.REMOVED,
+                                ]
+                            )
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+    except (
+        DBAPIError,
+        InvalidRequestError,
+        StatementError,
+        IntegrityError,
+        OperationalError,
+        asyncio.TimeoutError,
+        asyncio.CancelledError,
+    ) as err:
+        config.watcher.logger.error(
+            f"Error getting reaction: {str(err)}", exc_info=True
+        )
+        return None
+
+
+async def set_reaction_status(
+    config: Configuration, reactions: list[Reaction], status: ReactionStatus
+) -> None:
+    """
+    Set the status of a list of reactions to a given status.
+
+    Args:
+        config (Configuration): App configuration
+        reactions (list[Reaction]): List of Reaction objects to update
+        status (ReactionStatus): Status to set for the reactions
+    """
+    async with config.db.write_lock:
+        async with config.db.session() as session:
+            async with session.begin():
+                for reaction in reactions:
+                    reaction.status = status
+                    reaction.last_modified = datetime.now()
+                    session.add(reaction)
+
+
+async def get_reaction(
+    config: Configuration, message_id: int, user_id: int, status: ReactionStatus
+) -> list[Reaction] | None:
+    """
+    Function to get all reactions for a given message ID, user ID and status.
+
+    Args:
+        config (Configuration): App configuration
+        message_id (int): Message ID to search from DC
+        user_id (int): Disscord user ID
+        status (ReactionStatus): Status from reaction to search for
+
+    Returns:
+        list[Reaction] | None: List of reactions or None if an error occurs
+    """
+
+    config.watcher.logger.trace(
+        f"Get reaction for message ID: {message_id}, user ID: {user_id}, status: {status}"
+    )
+    try:
+        async with config.db.session() as session:
+            return (
+                (
+                    await session.execute(
+                        select(Reaction)
+                        .where(Reaction.message_id == message_id)
+                        .where(Reaction.dc_id == str(user_id))
+                        .where(Reaction.status == status)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+    except (
+        DBAPIError,
+        InvalidRequestError,
+        StatementError,
+        IntegrityError,
+        OperationalError,
+        asyncio.TimeoutError,
+        asyncio.CancelledError,
+    ) as err:
+        config.watcher.logger.error(
+            f"Error getting reaction: {str(err)}", exc_info=True
+        )
+        return None
+
+
+async def merging_calc_base_game_1(
+    config: Configuration, game_ids: list[int]
+) -> list[Game1PlayerResult]:
+    """
+    Function prepares the ranking for game 1 based on the game IDs.
+    The ranking is based on the number of completed tasks, survival status and player days.
+
+    Args:
+        config (Configuration): App configuration
+        game_ids (list[int]): Game IDs to determine the ranks for
+
+    Returns:
+        list[Game1PlayerResult]: List of Game1PlayerResult objects with determined ranks
+    """
+    try:
+        config.watcher.logger.debug(f"Determine ranks for game IDs: {game_ids}")
+        async with config.db.session() as session:
+            statement = (
+                select(Game1PlayerResult)
+                .join(Game1PlayerResult.gameplayerassociation)
+                .join(GamePlayerAssociation.player)
+                .join(GamePlayerAssociation.game)
+                .where(GamePlayerAssociation.game_id.in_(game_ids))
+                .order_by(
+                    desc(Game1PlayerResult.completed_tasks),
+                    desc(case((Game1PlayerResult.survived == "yes", 1), else_=0)),
+                    desc(Game1PlayerResult.player_days),
+                )
+                .options(
+                    selectinload(Game1PlayerResult.gameplayerassociation).selectinload(
+                        GamePlayerAssociation.player
+                    ),
+                    selectinload(Game1PlayerResult.gameplayerassociation).selectinload(
+                        GamePlayerAssociation.game
+                    ),
+                )
+            )
+            return (await session.execute(statement)).scalars().all()
+
+    except (
+        DBAPIError,
+        InvalidRequestError,
+        StatementError,
+        IntegrityError,
+        OperationalError,
+        asyncio.TimeoutError,
+        asyncio.CancelledError,
+    ) as err:
+        config.watcher.logger.error(
+            f"Error getting reaction: {str(err)}", exc_info=True
+        )
+        return []
+
+
+async def schedule_new_league_table(
+    config: Configuration, sorted_players: list[tuple]
+) -> None:
+    """
+    Function to create a new league table based on the sorted players. First the old
+    league table is deleted and then the new one is created based on the sorted players
+    with their points and survived games.
+
+    Args:
+        config (Configuration): App configuration
+        sorted_players (list[tuple]): Sorted list of players with their points and survived games
+    """
+    async with config.db.write_lock:
+        async with config.db.session() as session:
+            async with session.begin():
+                await session.execute(delete(League))
+                for player_id, value in sorted_players:
+                    player = await get_player(config, player_id)
+                    session.add(
+                        League(
+                            player=player,
+                            points=value["total_points"],
+                            survived=value["total_survived"],
+                        )
+                    )
+                    config.watcher.logger.debug(
+                        f"Player: {player.name}, Points: {value['total_points']}, "
+                        f"Survived: {value['total_survived']}"
+                    )
+    config.watcher.logger.info("League table generated")
+
+
+async def get_all_game_days(config: Configuration) -> int:
+    """
+    Function to get the total number of playing days from all finished games in the database.
+
+    Args:
+        config (Configuration): App configuration
+
+    Returns:
+        int: Total number of playing days from all finished games
     """
     async with config.db.session() as session:
         async with session.begin():
-            session.add(obj)
+            total_days = await session.execute(
+                select(func.sum(Game.playing_days)).where(
+                    Game.status == GameStatus.FINISHED
+                )
+            )
+            return total_days.scalar() or 0
 
 
 async def sync_db(engine: AsyncEngine):

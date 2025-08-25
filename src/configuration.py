@@ -2,6 +2,7 @@
 Load environment variables and validation of project configurations from user
 """
 import re
+import asyncio
 # from typing import List, Optional
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,7 +26,9 @@ class GeneralGame(BaseModel):
     export_task_path: str
     weighted_hours_g1: float
     weighted_league_pos_g1: float
-
+    weighted_rank_task_g1: int
+    weighted_rank_surv_g1: int
+    weighted_rank_days_g1: int
 
 class DbConfiguration(BaseModel):
     """
@@ -35,6 +38,7 @@ class DbConfiguration(BaseModel):
     db_url: str = None
     engine: AsyncEngine = None
     session: async_sessionmaker = None
+    write_lock: asyncio.locks.Lock = asyncio.Lock()  # pylint: disable=not-callable
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def initialize_db(self):

@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime
 from collections import defaultdict
 from discord import Interaction, errors
-from sqlalchemy import func, delete
+from sqlalchemy import func
 from sqlalchemy.future import select
 from sqlalchemy.exc import (
     SQLAlchemyError,
@@ -23,16 +23,19 @@ from .db import (
     Game,
     GamePlayerAssociation,
     GameStatus,
-    update_db_obj,
     League,
     Rank,
-    get_player,
-    get_tasks_based_on_rating_1,
-    balanced_task_mix_random,
 )
+from .db import update_db_obj, schedule_new_league_table, get_all_game_days
 
-positions_game_1 = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
-# league_positions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"]
+
+league_positions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
+
+class MissingGameConfig(Exception):
+    """
+    Exception raised when the game configuration is missing or incomplete.
+    """
 
 
 class GameStats:
@@ -98,92 +101,37 @@ class GameStats:
         return self.count_league_participants > 0 and self.max_hours > 0
 
 
-async def stop_game(config: Configuration, game: Game) -> None:
+class GameConfig:
     """
-    Helper function to stop a game in case that a wrong input has been givin in selection menu.
+    General GameConfig class to store the configuration for a game.
+    """
+
+    def __init__(self, name, game_emojis):
+        self.name: str = name
+        self.game_emojis: list = game_emojis
+
+
+game_configs = {
+    "Fast and hungry, task hunt": GameConfig(
+        name="Fast and hungry, task hunt", game_emojis=["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🇭"]
+    )
+}
+
+
+async def failed_game(config: Configuration, game: Game) -> None:
+    """
+    Helper function to stop a game in case that a wrong input has been givin in selection menu
+    and set the game status to FAILURE.
 
     Args:
         config (Configuration): App configuration
         game (Game): Game object for change status
     """
-    game.status = GameStatus.STOPPED
+    game.status = GameStatus.FAILURE
     await update_db_obj(config, game)
-    config.watcher.logger.info(f"Game with ID: {game.id} was stopped.")
-
-
-async def initialize_game_1(
-    config: Configuration,
-    interaction: Interaction,
-    game: Game,
-    players: list[Player],
-    main_task: Task,
-) -> bool:
-    """
-    Function to initialize the game and send a message to all players with the
-    tasks they have to complete.
-
-    Args:
-        config (Configuration): App configuration
-        interaction (Interaction): Interaction object to get the guild
-        game (Game): Game object to get the game id
-        players (list[Player]): List of players to get the player ids and send messages with quests
-        main_task (Task): Main task for all player in game 1
-    """
-    try:
-        game_statistics = GameStats()
-        await game_statistics.process_league_stats(config)
-        players.sort(key=lambda x: x.hours, reverse=True)
-        config.watcher.logger.debug(game_statistics)
-        exclude_ids = set()
-        exclude_lock = asyncio.Lock()  # pylint: disable=not-callable
-        for player in players:
-            dc_user = await interaction.guild.fetch_member(player.dc_id)
-            if dc_user is None:
-                config.logger.error(
-                    f"User {player.name} not found in the guild with dc_id: {player.dc_id}."
-                )
-                await stop_game(config, game)
-                break
-            player_rank = await get_player_rank(config, player, game_statistics)
-            rated_tasks = await get_tasks_based_on_rating_1(config, player_rank * 100)
-            if not rated_tasks:
-                config.watcher.logger.error(
-                    f"No tasks found for player rating {player_rank}: {player.name}."
-                )
-                await stop_game(config, game)
-                break
-            async with exclude_lock:
-                tasks = await balanced_task_mix_random(config, rated_tasks, exclude_ids)
-                config.watcher.logger.debug(
-                    f"Tasks for player {player.name}: {[task.name for task in tasks]}"
-                )
-                config.watcher.logger.debug(f"Exclude IDs: {exclude_ids}")
-            if not tasks:
-                config.watcher.logger.error(
-                    f"No tasks found for player with Algo-Balanced: {player.name}."
-                )
-                await stop_game(config, game)
-                break
-            tasks.append(main_task)
-            await create_quests(config, player, game, tasks)
-            await dc_user.send(
-                f"Hello {dc_user.name}, you are now in the game "
-                f'"{game.name}". You have to complete the following quests:\n'
-                + "\n".join(
-                    f"{positions_game_1[i]} {task.name}: {task.description}"
-                    for i, task in enumerate(tasks)
-                )
-            )
-        else:
-            return True
-        return False
-    except errors.HTTPException as err:
-        config.watcher.logger.error(
-            f"Error sending message to user {player.name} with dc_id: {player.dc_id}. "
-            f"Error: {err}"
-        )
-        await stop_game(config, game)
-        return False
+    config.watcher.logger.info(
+        f"Game with ID: {game.id} was set to failure because of an error."
+    )
 
 
 async def create_quests(
@@ -263,65 +211,55 @@ async def generate_league_table(config: Configuration) -> None:
         key=lambda x: (x[1]["total_points"], x[1]["total_survived"]),
         reverse=True,
     )
+    await schedule_new_league_table(config, sorted_players)
 
-    async with config.db.session() as session:
-        async with session.begin():
-            await session.execute(delete(League))
-            for player_id, value in sorted_players:
-                player = await get_player(config, player_id)
-                session.add(
-                    League(
-                        player=player,
-                        points=value["total_points"],
-                        survived=value["total_survived"],
+
+async def show_league_table(interaction: Interaction, config: Configuration) -> None:
+    """
+    Function to show the league table in the Discord channel.
+
+    Args:
+        interaction (Interaction): Interaction object to respond to the command
+        config (Configuration): App configuration
+    """
+    try:
+        async with config.db.session() as session:
+            async with session.begin():
+                league_table = (
+                    (
+                        await session.execute(
+                            select(League).order_by(League.points.desc())
+                        )
                     )
+                    .scalars()
+                    .all()
                 )
-                config.watcher.logger.debug(
-                    f"Player: {player.name}, Points: {value['total_points']}, "
-                    f"Survived: {value['total_survived']}"
+                if not league_table:
+                    await interaction.response.send_message(
+                        "No players found in the league table."
+                    )
+                    return
+                total_days = await get_all_game_days(config)
+                response_message = "The current league of starving:\n\n"
+                for i, league in enumerate(league_table):
+                    dc_name = f"<@{league.player.dc_id}>"
+                    response_message += (
+                        f"{league_positions[i]} {dc_name} - Points: {league.points}, "
+                        + f"Survived: {league.survived}\n"
+                    )
+                response_message += (
+                    f"\nThe total number of match days in all tournaments: {total_days}"
                 )
-    config.watcher.logger.info("League table generated")
 
-
-# async def show_league_table(
-#     interaction: Interaction, config: Configuration
-# ) -> None:
-#     """
-#     Function to show the league table in the Discord channel.
-
-#     Args:
-#         interaction (Interaction): Interaction object to respond to the command
-#         config (Configuration): App configuration
-#     """
-#     try:
-#         async with config.db.session() as session:
-#             async with session.begin():
-#                 league_table = (
-#                     await session.execute(
-#                         select(League).order_by(League.points.desc())
-#                     )
-#                 ).scalars().all()
-
-#         if not league_table:
-#             await interaction.response.send_message(
-#                 "No players found in the league table."
-#             )
-#             return
-
-#         table_lines = [
-#             f"{league_positions[i]} {league.player.name} - "
-#             f"Points: {league.points}, Survived: {league.survived}"
-#             for i, league in enumerate(league_table)
-#         ]
-#         response_message = "\n".join(table_lines)
-
-#         await interaction.response.send_message(response_message)
-#     except SQLAlchemyError as db_err:
-#         config.watcher.logger.error(f"Database error while showing league table: {db_err}")
-#         await interaction.response.send_message("Error retrieving league table.")
-#     except errors.HTTPException as http_err:
-#         config.watcher.logger.error(f"HTTP error while sending message: {http_err}")
-#         await interaction.response.send_message("Error sending league table message.")
+        await interaction.response.send_message(response_message)
+    except SQLAlchemyError as db_err:
+        config.watcher.logger.error(
+            f"Database error while showing league table: {db_err}"
+        )
+        await interaction.response.send_message("Error retrieving league table.")
+    except errors.HTTPException as http_err:
+        config.watcher.logger.error(f"HTTP error while sending message: {http_err}")
+        await interaction.response.send_message("Error sending league table message.")
 
 
 async def get_player_rank(

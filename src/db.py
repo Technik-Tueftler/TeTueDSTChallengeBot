@@ -4,7 +4,7 @@ import random
 from enum import Enum
 from typing import Set
 from datetime import datetime
-from sqlalchemy import ForeignKey, func, case, desc
+from sqlalchemy import ForeignKey, func, case, desc, delete
 from sqlalchemy import Enum as AlchemyEnum
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -362,12 +362,12 @@ async def process_player(
     return processed_player_list
 
 
-async def create_game(config, game_name: str, player: list[Player]) -> Game:
+async def create_game(config: Configuration, game_name: str, player: list[Player]) -> Game:
     """
     Function to create a game in the database and link all players to the game.
 
     Args:
-        config (_type_): _description_
+        config (Configuration): App configuration
         game_name (str): Game name
         player (list[Player]): All players in the game
 
@@ -398,6 +398,17 @@ async def create_game(config, game_name: str, player: list[Player]) -> Game:
 async def get_game_player_association(
     config: Configuration, game_id: int, player_id: int
 ) -> GamePlayerAssociation | None:
+    """
+    Funktion to get a game player association from the database by game id and player id.
+
+    Args:
+        config (Configuration): App configuration
+        game_id (int): Game ID
+        player_id (int): Player ID
+
+    Returns:
+        GamePlayerAssociation | None: Object of the game player association or None if not found
+    """
     async with config.db.session() as session:
         async with session.begin():
             game_player_association = (
@@ -813,7 +824,19 @@ async def set_reaction_status(
 
 async def get_reaction(
     config: Configuration, message_id: int, user_id: int, status: ReactionStatus
-) -> Reaction | None:
+) -> list[Reaction] | None:
+    """
+    Function to get all reactions for a given message ID, user ID and status.
+
+    Args:
+        config (Configuration): App configuration
+        message_id (int): Message ID to search from DC
+        user_id (int): Disscord user ID
+        status (ReactionStatus): Status from reaction to search for
+
+    Returns:
+        list[Reaction] | None: List of reactions or None if an error occurs
+    """
 
     config.watcher.logger.trace(
         f"Get reaction for message ID: {message_id}, user ID: {user_id}, status: {status}"
@@ -839,63 +862,20 @@ async def get_reaction(
         return None
 
 
-async def get_game_player_associations_from_id(
-    config: Configuration, search_class: Game | Player, ids: list[int]
-) -> list[GamePlayerAssociation]:
-    """
-    Function to get all game player associations based on a list of game or player IDs.
-
-    Args:
-        config (Configuration): App configuration
-        search_class (Game | Player): Class to search for (Game or Player)
-        ids (list[int]): List of IDs to search for
-
-    Returns:
-        list[GamePlayerAssociation]: List of GamePlayerAssociation objects
-    """
-    async with config.db.session() as session:
-        async with session.begin():
-            if search_class == Game:
-                result = await session.execute(
-                    select(GamePlayerAssociation).where(
-                        GamePlayerAssociation.game_id.in_(ids)
-                    )
-                )
-            else:
-                result = await session.execute(
-                    select(GamePlayerAssociation).where(
-                        GamePlayerAssociation.player_id.in_(ids)
-                    )
-                )
-    return result.scalars().all()
-
-
-async def get_game1_player_results_from_id(
-    config: Configuration, ids: list[int]
-) -> list[Game1PlayerResult]:
-    """
-    Function to get all game 1 player results based on a list of game player association IDs
-    Args:
-        config (Configuration): App configuration
-        ids (list[int]): List of game player association IDs
-    """
-    async with config.db.session() as session:
-        return (
-            (
-                await session.execute(
-                    select(Game1PlayerResult).where(
-                        Game1PlayerResult.game_player_association_id.in_(ids)
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-
-
 async def merging_calc_base_game_1(
     config: Configuration, game_ids: list[int]
 ) -> list[Game1PlayerResult]:
+    """
+    Function prepares the ranking for game 1 based on the game IDs.
+    The ranking is based on the number of completed tasks, survival status and player days.
+
+    Args:
+        config (Configuration): App configuration
+        game_ids (list[int]): Game IDs to determine the ranks for
+
+    Returns:
+        list[Game1PlayerResult]: List of Game1PlayerResult objects with determined ranks
+    """
     try:
         config.watcher.logger.debug(f"Determine ranks for game IDs: {game_ids}")
         async with config.db.session() as session:
@@ -926,6 +906,36 @@ async def merging_calc_base_game_1(
             f"Error determining ranks: {str(err)}", exc_info=True
         )
         return []
+
+
+async def schedule_new_league_table(config: Configuration, sorted_players: list[tuple]) -> None:
+    """
+    Function to create a new league table based on the sorted players. First the old
+    league table is deleted and then the new one is created based on the sorted players 
+    with their points and survived games.
+
+    Args:
+        config (Configuration): App configuration
+        sorted_players (list[tuple]): Sorted list of players with their points and survived games
+    """
+    async with config.db.write_lock:
+        async with config.db.session() as session:
+            async with session.begin():
+                await session.execute(delete(League))
+                for player_id, value in sorted_players:
+                    player = await get_player(config, player_id)
+                    session.add(
+                        League(
+                            player=player,
+                            points=value["total_points"],
+                            survived=value["total_survived"],
+                        )
+                    )
+                    config.watcher.logger.debug(
+                        f"Player: {player.name}, Points: {value['total_points']}, "
+                        f"Survived: {value['total_survived']}"
+                    )
+    config.watcher.logger.info("League table generated")
 
 
 async def sync_db(engine: AsyncEngine):

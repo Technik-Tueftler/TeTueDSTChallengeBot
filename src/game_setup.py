@@ -3,7 +3,6 @@ File contains all the functions required to adjust the status of a game.
 The workflow is started via a command.
 """
 
-import asyncio
 import discord
 from .configuration import Configuration
 from .db import get_games_w_status, get_game_from_id, update_db_obj
@@ -176,7 +175,11 @@ async def evaluate_game2(interaction: discord.Interaction, config: Configuration
 
 
 class GenGameSelect(discord.ui.Select):
-    def __init__(self, config, games):
+    """
+    General GameSelect class to create a input menu to select the target game. Here
+    the input is built dynamically with the possible games that can be changed.
+    """
+    def __init__(self, config: Configuration, games: list[Game]):
         self.config = config
         options = [
             discord.SelectOption(
@@ -205,12 +208,20 @@ class GenGameSelect(discord.ui.Select):
 
 
 class GenGameSelectView(discord.ui.View):
+    """
+    GenGameSelectView class to create a view for the user to select the
+    target game to change the status.
+    """
     def __init__(self, config, games):
         super().__init__()
         self.selected_game_id = None
         self.add_item(GenGameSelect(config, games))
 
     async def wait_for_selection(self):
+        """
+        Function to wait for the user to select a game. This function is called after sending the
+        message with the view to wait for the user to select
+        """
         await self.wait()
         return self.selected_game_id
 

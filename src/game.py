@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime
 from collections import defaultdict
 from discord import Interaction, errors
-from sqlalchemy import func, delete
+from sqlalchemy import func
 from sqlalchemy.future import select
 from sqlalchemy.exc import (
     SQLAlchemyError,
@@ -23,10 +23,12 @@ from .db import (
     Game,
     GamePlayerAssociation,
     GameStatus,
-    update_db_obj,
     League,
     Rank,
-    get_player,
+)
+from .db import (
+    update_db_obj,
+    schedule_new_league_table
 )
 
 
@@ -103,6 +105,9 @@ class GameStats:
 
 
 class GameConfig:
+    """
+    General GameConfig class to store the configuration for a game.
+    """
     def __init__(self, name, game_emojis):
         self.name: str = name
         self.game_emojis: list = game_emojis
@@ -208,26 +213,7 @@ async def generate_league_table(config: Configuration) -> None:
         key=lambda x: (x[1]["total_points"], x[1]["total_survived"]),
         reverse=True,
     )
-
-    # TODO: In db.py verschieben
-    async with config.db.write_lock:
-        async with config.db.session() as session:
-            async with session.begin():
-                await session.execute(delete(League))
-                for player_id, value in sorted_players:
-                    player = await get_player(config, player_id)
-                    session.add(
-                        League(
-                            player=player,
-                            points=value["total_points"],
-                            survived=value["total_survived"],
-                        )
-                    )
-                    config.watcher.logger.debug(
-                        f"Player: {player.name}, Points: {value['total_points']}, "
-                        f"Survived: {value['total_survived']}"
-                    )
-    config.watcher.logger.info("League table generated")
+    await schedule_new_league_table(config, sorted_players)
 
 
 async def show_league_table(interaction: Interaction, config: Configuration) -> None:

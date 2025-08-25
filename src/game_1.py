@@ -8,9 +8,24 @@ from datetime import datetime
 import discord
 from discord import Interaction, errors
 from .game import MissingGameConfig, GameStats
-from .game import game_configs, failed_game, get_player_rank, create_quests, generate_league_table
+from .game import (
+    game_configs,
+    failed_game,
+    get_player_rank,
+    create_quests,
+    generate_league_table,
+)
 from .configuration import Configuration
-from .db import Player, Exercise, Game, Task, ReactionStatus, Game1PlayerResult, Rank, GameStatus
+from .db import (
+    Player,
+    Exercise,
+    Game,
+    Task,
+    ReactionStatus,
+    Game1PlayerResult,
+    Rank,
+    GameStatus,
+)
 from .db import (
     get_random_tasks,
     process_player,
@@ -25,8 +40,6 @@ from .db import (
     get_reaction,
     get_game_player_association,
     update_db_objs,
-    get_game_player_associations_from_id,
-    get_game1_player_results_from_id,
     merging_calc_base_game_1,
 )
 
@@ -308,68 +321,6 @@ class UserSelectView(discord.ui.View):
         self.stop()
 
 
-# class PlayerGameDaysInput(
-#     discord.ui.Modal,
-#     title="Enter the final in-game days of the tournament and the days that each player survived.",
-# ):
-#     """
-#     PlayerGameDaysInput class for creating an input window for entering the final match days of
-#     the tournament and the players.
-#     """
-
-#     def __init__(self, config, player_list: List[Player], game: Game):
-#         super().__init__()
-#         self.player_list = player_list
-#         self.input_valid = True
-#         self.config = config
-#         self.add_item(
-#             discord.ui.TextInput(
-#                 label="Playing time (days)",
-#                 default="70",
-#                 placeholder="Enter the max. number of days played in the tournament or the final world days.",
-#                 required=True,
-#                 max_length=3,
-#             )
-#         )
-#         for player in player_list:
-#             self.add_item(
-#                 discord.ui.TextInput(
-#                     label=player.name,
-#                     default="0",
-#                     placeholder=f"Enter the number of days {player.name} has survived.",
-#                     required=True,
-#                     max_length=5,
-#                 )
-#             )
-
-#     async def on_submit(
-#         self, interaction: discord.Interaction
-#     ):  # pylint: disable=arguments-differ
-#         try:
-#             mapping = {child.label: child.value for child in self.children}
-#             print(f"Mapping: {mapping}")
-#             # for player in self.player_list:
-#             #     if not mapping[player.name].isdigit():
-#             #         self.input_valid = False
-#             #         break
-#             #     player.hours = mapping[player.name]
-#             # if not self.input_valid:
-#             #     await interaction.response.send_message(
-#             #         "Please enter only numbers for the playing days.",
-#             #         ephemeral=True,
-#             #     )
-#             #     return
-#             # await interaction.response.send_message(
-#             #     "All entries for the game and the players were error-free.",
-#             #     ephemeral=True,
-#             # )
-#             self.stop()
-#         except AttributeError as err:
-#             self.config.watcher.logger.error(
-#                 f"Error during on_submit in PlayerGameDaysInput: {err}"
-#             )
-
-
 async def game1(interaction: discord.Interaction, config: Configuration):
     """
     Command function to start a game with a user selection menu. This game is
@@ -540,6 +491,9 @@ async def initialize_game_1(
 
 
 class PlayerGameDaysInput(discord.ui.Modal):
+    """
+    PlayerGameDaysInput class to create a input menu with for the player game days
+    """
     def __init__(self, config, player_list, game):
         super().__init__(title="Enter game days and player survival days")
         self.config = config
@@ -565,7 +519,9 @@ class PlayerGameDaysInput(discord.ui.Modal):
                 )
             )
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(
+        self, interaction: discord.Interaction
+    ):  # pylint: disable=arguments-differ
         try:
             result = {child.label: child.value for child in self.children}
             player_results = []
@@ -633,6 +589,10 @@ class PlayerGameDaysInput(discord.ui.Modal):
 
 
 class ModalButtonView(discord.ui.View):
+    """
+    ModalButtonView class to create a view with a button to open the modal for
+    entering the player game days and survival status.
+    """
     def __init__(self, config: Configuration, player_list: list[Player], game: Game):
         super().__init__(timeout=None)
         self.config = config
@@ -641,8 +601,14 @@ class ModalButtonView(discord.ui.View):
 
     @discord.ui.button(label="Submission", style=discord.ButtonStyle.primary)
     async def open_modal(
-        self, interaction: discord.Interaction, button: discord.ui.Button
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,  # pylint: disable=unused-argument
     ):
+        """
+        Function to open the modal for entering the player game days and survival status.
+        This function is called when the button is clicked.
+        """
         game_input = PlayerGameDaysInput(self.config, self.player_list, self.game)
         await interaction.response.send_modal(game_input)
         await game_input.wait()
@@ -715,7 +681,13 @@ async def finish_game_1(
                 + f"Days: {value_days}"
             )
             config.watcher.logger.debug(f"Total Score for {player.name}: {score}")
-            player_scores[association_id] = (player.name, score, result.player_days, player.dc_id, result.survived)
+            player_scores[association_id] = (
+                player.name,
+                score,
+                result.player_days,
+                player.dc_id,
+                result.survived,
+            )
         sorted_scores = sorted(
             player_scores.items(), key=lambda x: x[1][1], reverse=True
         )

@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """All database related functions are here."""
 import asyncio
 import random

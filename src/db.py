@@ -1,5 +1,5 @@
 """All database related functions are here."""
-
+import asyncio
 import random
 from enum import Enum
 from typing import Set
@@ -16,7 +16,14 @@ from sqlalchemy.orm import (
 )
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.future import select
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from sqlalchemy.exc import (
+    DBAPIError,
+    InvalidRequestError,
+    StatementError,
+    IntegrityError,
+    OperationalError,
+    SQLAlchemyError
+)
 from .configuration import Configuration
 
 
@@ -795,10 +802,16 @@ async def get_reaction_for_remove(
                 .scalars()
                 .all()
             )
-    except Exception as err:
-        config.watcher.logger.error(
-            f"Error getting reaction: {str(err)}", exc_info=True
-        )
+    except (
+        DBAPIError,
+        InvalidRequestError,
+        StatementError,
+        IntegrityError,
+        OperationalError,
+        asyncio.TimeoutError,
+        asyncio.CancelledError,
+    ) as err:
+        config.watcher.logger.error(f"Error getting reaction: {str(err)}", exc_info=True)
         return None
 
 
@@ -855,10 +868,16 @@ async def get_reaction(
                 .scalars()
                 .all()
             )
-    except Exception as err:
-        config.watcher.logger.error(
-            f"Error getting reaction: {str(err)}", exc_info=True
-        )
+    except (
+        DBAPIError,
+        InvalidRequestError,
+        StatementError,
+        IntegrityError,
+        OperationalError,
+        asyncio.TimeoutError,
+        asyncio.CancelledError,
+    ) as err:
+        config.watcher.logger.error(f"Error getting reaction: {str(err)}", exc_info=True)
         return None
 
 
@@ -901,10 +920,16 @@ async def merging_calc_base_game_1(
             )
             return (await session.execute(statement)).scalars().all()
 
-    except Exception as err:
-        config.watcher.logger.error(
-            f"Error determining ranks: {str(err)}", exc_info=True
-        )
+    except (
+        DBAPIError,
+        InvalidRequestError,
+        StatementError,
+        IntegrityError,
+        OperationalError,
+        asyncio.TimeoutError,
+        asyncio.CancelledError,
+    ) as err:
+        config.watcher.logger.error(f"Error getting reaction: {str(err)}", exc_info=True)
         return []
 
 

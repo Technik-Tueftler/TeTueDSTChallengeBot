@@ -7,6 +7,7 @@ from typing import List
 from datetime import datetime
 import discord
 from discord import Interaction, errors
+from discord.errors import DiscordException, NotFound, HTTPException, Forbidden
 from .game import MissingGameConfig, GameStats
 from .game import (
     game_configs,
@@ -394,9 +395,9 @@ async def game1(interaction: discord.Interaction, config: Configuration):
         config.watcher.logger.error(
             f"Missing game configuration: {err}, game not started."
         )
-    except Exception as err:
+    except (DiscordException, HTTPException, NotFound, Forbidden) as err:
         config.watcher.logger.error(
-            f"An error occurred while starting the game: {err}. Please check the error log."
+            f"Discord related error occurred while starting the game: {err}"
         )
 
 
@@ -484,9 +485,9 @@ async def initialize_game_1(
         config.watcher.logger.error(f"Missing game configuration: {err}")
         await failed_game(config, game)
         return False
-    except Exception as err:
+    except (DiscordException) as err:
         config.watcher.logger.error(
-            f"An error occurred while starting the game: {err}. Please check the error log."
+            f"Discord related error occurred while initialize the game: {err}"
         )
 
 
@@ -582,9 +583,9 @@ class PlayerGameDaysInput(discord.ui.Modal):
             await interaction.response.send_message(
                 "All inputs have been saved.", ephemeral=True
             )
-        except Exception as err:
+        except (DiscordException) as err:
             self.config.watcher.logger.error(
-                f"Error during on_submit in PlayerGameDaysInput: {err}"
+                f"Discord related error occurred while initialize the game: {err}"
             )
 
 
@@ -727,7 +728,14 @@ async def finish_game_1(
         await generate_league_table(config)
         await interaction.followup.send(response_message)
 
-    except Exception as err:
+    except (
+        asyncio.TimeoutError,
+        asyncio.CancelledError,
+        DiscordException,
+        HTTPException,
+        Forbidden,
+        NotFound,
+    ) as err:
         config.watcher.logger.error(
             f"An error occurred while finishing the game: {err}"
         )

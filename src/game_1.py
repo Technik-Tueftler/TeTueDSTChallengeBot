@@ -10,14 +10,7 @@ from discord import Interaction, errors
 from .game import MissingGameConfig, GameStats
 from .game import game_configs, failed_game, get_player_rank, create_quests
 from .configuration import Configuration
-from .db import (
-    Player,
-    Exercise,
-    Game,
-    Task,
-    ReactionStatus,
-    Game1PlayerResult,
-)
+from .db import Player, Exercise, Game, Task, ReactionStatus, Game1PlayerResult, Rank
 from .db import (
     get_random_tasks,
     process_player,
@@ -34,8 +27,10 @@ from .db import (
     update_db_objs,
     get_game_player_associations_from_id,
     get_game1_player_results_from_id,
-    determine_ranks_game_1
+    merging_calc_base_game_1,
 )
+
+game_positions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"]
 
 
 class GameDifficultyInput(discord.ui.View):
@@ -665,6 +660,7 @@ async def finish_game_1(
         game (Game): Game object to finish the game
     """
     try:
+        player_scores = {}
         game_x_player = await get_all_game_x_player_from_message_id(
             config, game.message_id
         )
@@ -692,7 +688,66 @@ async def finish_game_1(
             ephemeral=True,
         )
         await view.wait()
-        _ = await determine_ranks_game_1(config, [game.id])
+        results = await merging_calc_base_game_1(config, [game.id])
+
+        for result in results:
+            score = 0
+            player = result.gameplayerassociation.player
+            game = result.gameplayerassociation.game
+            association_id = result.gameplayerassociation.id
+            config.watcher.logger.debug(
+                f"Processing Player ID: {player.id}, Game ID: {game.id}, "
+                + f"Association ID: {association_id}"
+            )
+            config.watcher.logger.debug(
+                f"Player: {player.name}, Game: {game.id}, "
+                + f"Completed Tasks: {result.completed_tasks}, Survived: {result.survived}, "
+                + f"Player Days: {result.player_days}"
+            )
+            value_tasks = result.completed_tasks * config.game.weighted_rank_task_g1
+            value_survived = (
+                1 if result.survived == "yes" else 0
+            ) * config.game.weighted_rank_surv_g1
+            value_days = result.player_days * config.game.weighted_rank_days_g1
+            score = value_tasks + value_survived + value_days
+            config.watcher.logger.debug(
+                f"Score: {score} - Tasks: {value_tasks}, Survived: {value_survived}, "
+                + f"Days: {value_days}"
+            )
+            config.watcher.logger.debug(f"Total Score for {player.name}: {score}")
+            player_scores[association_id] = (player.name, score, result.player_days, player.dc_id, result.survived)
+        sorted_scores = sorted(
+            player_scores.items(), key=lambda x: x[1][1], reverse=True
+        )
+        ranks = []
+        rank = 1
+        points = 6
+        last_score = 0
+        response_message = f"Placings from the game (ID: {game.id}):\n"
+        for player in sorted_scores:
+            if player[1][1] < last_score:
+                rank += 1
+                points -= 1
+            temp = Rank(
+                placement=rank,
+                points=points,
+                timestamp=datetime.now(),
+                game_player_association_id=player[0],
+                survived=player[1][2],
+            )
+            last_score = player[1][1]
+            ranks.append(temp)
+            dc_name = f"<@{player[1][3]}>"
+            survived_icon = ":olive:" if player[1][4] == "yes" else ":skull:"
+            response_message += (
+                f"{game_positions[rank-1]} {dc_name:<20} {survived_icon} - Points: {points}, "
+                + f"Survived: {player[1][2]} / {game.playing_days} days"
+                + "\n"
+            )
+        await update_db_objs(config, ranks)
+        await interaction.followup.send(response_message)
+        # Game in status ausgewertet
+        # Leage neu berechnen
 
     except Exception as err:
         config.watcher.logger.error(

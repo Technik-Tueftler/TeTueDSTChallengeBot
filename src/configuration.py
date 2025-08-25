@@ -26,7 +26,9 @@ class GeneralGame(BaseModel):
     export_task_path: str
     weighted_hours_g1: float
     weighted_league_pos_g1: float
-
+    weighted_rank_task_g1: int
+    weighted_rank_surv_g1: int
+    weighted_rank_days_g1: int
 
 class DbConfiguration(BaseModel):
     """

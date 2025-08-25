@@ -1,4 +1,5 @@
 """All database related functions are here."""
+
 import random
 from enum import Enum
 from typing import Set
@@ -11,7 +12,7 @@ from sqlalchemy.orm import (
     mapped_column,
     relationship,
     joinedload,
-    selectinload
+    selectinload,
 )
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.future import select
@@ -698,7 +699,7 @@ async def update_db_obj(
 
 async def update_db_objs(
     config: Configuration,
-    objs: list[Game | Player | Exercise | Reaction | Game1PlayerResult],
+    objs: list[Game | Player | Exercise | Reaction | Game1PlayerResult | Rank],
 ) -> None:
     """
     Function to update a game or player object in the database
@@ -871,7 +872,7 @@ async def get_game_player_associations_from_id(
 
 async def get_game1_player_results_from_id(
     config: Configuration, ids: list[int]
-    ) -> list[Game1PlayerResult]:
+) -> list[Game1PlayerResult]:
     """
     Function to get all game 1 player results based on a list of game player association IDs
     Args:
@@ -882,8 +883,9 @@ async def get_game1_player_results_from_id(
         return (
             (
                 await session.execute(
-                    select(Game1PlayerResult)
-                    .where(Game1PlayerResult.game_player_association_id.in_(ids))
+                    select(Game1PlayerResult).where(
+                        Game1PlayerResult.game_player_association_id.in_(ids)
+                    )
                 )
             )
             .scalars()
@@ -891,10 +893,12 @@ async def get_game1_player_results_from_id(
         )
 
 
-async def determine_ranks_game_1(config: Configuration, game_ids: list[int]) -> list[Game1PlayerResult]:
+async def merging_calc_base_game_1(
+    config: Configuration, game_ids: list[int]
+) -> list[Game1PlayerResult]:
     try:
         config.watcher.logger.debug(f"Determine ranks for game IDs: {game_ids}")
-        async with config.db.session() as session:          
+        async with config.db.session() as session:
             statement = (
                 select(Game1PlayerResult)
                 .join(Game1PlayerResult.gameplayerassociation)
@@ -904,29 +908,25 @@ async def determine_ranks_game_1(config: Configuration, game_ids: list[int]) -> 
                 .order_by(
                     desc(Game1PlayerResult.completed_tasks),
                     desc(case((Game1PlayerResult.survived == "yes", 1), else_=0)),
-                    desc(Game1PlayerResult.player_days)
+                    desc(Game1PlayerResult.player_days),
                 )
                 .options(
-                    selectinload(Game1PlayerResult.gameplayerassociation)
-                    .selectinload(GamePlayerAssociation.player),
-                    selectinload(Game1PlayerResult.gameplayerassociation)
-                    .selectinload(GamePlayerAssociation.game)
+                    selectinload(Game1PlayerResult.gameplayerassociation).selectinload(
+                        GamePlayerAssociation.player
+                    ),
+                    selectinload(Game1PlayerResult.gameplayerassociation).selectinload(
+                        GamePlayerAssociation.game
+                    ),
                 )
             )
-            results = (await session.execute(statement)).scalars().all()
-
-            for result in results:
-                player = result.gameplayerassociation.player
-                game = result.gameplayerassociation.game
-                config.watcher.logger.debug(
-                    f"Player: {player.name}, Game: {game.id}, "
-                    + f"Completed Tasks: {result.completed_tasks}, Survived: {result.survived}, "
-                    + f"Player Days: {result.player_days}"
-                )
+            return (await session.execute(statement)).scalars().all()
 
     except Exception as err:
-        config.watcher.logger.error(f"Error determining ranks: {str(err)}", exc_info=True)
+        config.watcher.logger.error(
+            f"Error determining ranks: {str(err)}", exc_info=True
+        )
         return []
+
 
 async def sync_db(engine: AsyncEngine):
     """

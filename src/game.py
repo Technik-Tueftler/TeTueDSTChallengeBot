@@ -26,10 +26,7 @@ from .db import (
     League,
     Rank,
 )
-from .db import (
-    update_db_obj,
-    schedule_new_league_table
-)
+from .db import update_db_obj, schedule_new_league_table, get_all_game_days
 
 
 league_positions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
@@ -108,6 +105,7 @@ class GameConfig:
     """
     General GameConfig class to store the configuration for a game.
     """
+
     def __init__(self, name, game_emojis):
         self.name: str = name
         self.game_emojis: list = game_emojis
@@ -241,13 +239,17 @@ async def show_league_table(interaction: Interaction, config: Configuration) -> 
                         "No players found in the league table."
                     )
                     return
-
-                table_lines = [
-                    f"{league_positions[i]} {league.player.name} - "
-                    f"Points: {league.points}, Survived: {league.survived}"
-                    for i, league in enumerate(league_table[: len(league_positions)])
-                ]
-        response_message = "\n".join(table_lines)
+                total_days = await get_all_game_days(config)
+                response_message = "The current league of starving:\n\n"
+                for i, league in enumerate(league_table):
+                    dc_name = f"<@{league.player.dc_id}>"
+                    response_message += (
+                        f"{league_positions[i]} {dc_name} - Points: {league.points}, "
+                        + f"Survived: {league.survived}\n"
+                    )
+                response_message += (
+                    f"\nThe total number of match days in all tournaments: {total_days}"
+                )
 
         await interaction.response.send_message(response_message)
     except SQLAlchemyError as db_err:

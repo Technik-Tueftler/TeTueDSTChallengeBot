@@ -22,7 +22,7 @@ from sqlalchemy.exc import (
     StatementError,
     IntegrityError,
     OperationalError,
-    SQLAlchemyError
+    SQLAlchemyError,
 )
 from .configuration import Configuration
 
@@ -369,7 +369,9 @@ async def process_player(
     return processed_player_list
 
 
-async def create_game(config: Configuration, game_name: str, player: list[Player]) -> Game:
+async def create_game(
+    config: Configuration, game_name: str, player: list[Player]
+) -> Game:
     """
     Function to create a game in the database and link all players to the game.
 
@@ -811,7 +813,9 @@ async def get_reaction_for_remove(
         asyncio.TimeoutError,
         asyncio.CancelledError,
     ) as err:
-        config.watcher.logger.error(f"Error getting reaction: {str(err)}", exc_info=True)
+        config.watcher.logger.error(
+            f"Error getting reaction: {str(err)}", exc_info=True
+        )
         return None
 
 
@@ -877,7 +881,9 @@ async def get_reaction(
         asyncio.TimeoutError,
         asyncio.CancelledError,
     ) as err:
-        config.watcher.logger.error(f"Error getting reaction: {str(err)}", exc_info=True)
+        config.watcher.logger.error(
+            f"Error getting reaction: {str(err)}", exc_info=True
+        )
         return None
 
 
@@ -929,14 +935,18 @@ async def merging_calc_base_game_1(
         asyncio.TimeoutError,
         asyncio.CancelledError,
     ) as err:
-        config.watcher.logger.error(f"Error getting reaction: {str(err)}", exc_info=True)
+        config.watcher.logger.error(
+            f"Error getting reaction: {str(err)}", exc_info=True
+        )
         return []
 
 
-async def schedule_new_league_table(config: Configuration, sorted_players: list[tuple]) -> None:
+async def schedule_new_league_table(
+    config: Configuration, sorted_players: list[tuple]
+) -> None:
     """
     Function to create a new league table based on the sorted players. First the old
-    league table is deleted and then the new one is created based on the sorted players 
+    league table is deleted and then the new one is created based on the sorted players
     with their points and survived games.
 
     Args:
@@ -961,6 +971,26 @@ async def schedule_new_league_table(config: Configuration, sorted_players: list[
                         f"Survived: {value['total_survived']}"
                     )
     config.watcher.logger.info("League table generated")
+
+
+async def get_all_game_days(config: Configuration) -> int:
+    """
+    Function to get the total number of playing days from all finished games in the database.
+
+    Args:
+        config (Configuration): App configuration
+
+    Returns:
+        int: Total number of playing days from all finished games
+    """
+    async with config.db.session() as session:
+        async with session.begin():
+            total_days = await session.execute(
+                select(func.sum(Game.playing_days)).where(
+                    Game.status == GameStatus.FINISHED
+                )
+            )
+            return total_days.scalar() or 0
 
 
 async def sync_db(engine: AsyncEngine):

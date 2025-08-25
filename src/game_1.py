@@ -8,9 +8,9 @@ from datetime import datetime
 import discord
 from discord import Interaction, errors
 from .game import MissingGameConfig, GameStats
-from .game import game_configs, failed_game, get_player_rank, create_quests
+from .game import game_configs, failed_game, get_player_rank, create_quests, generate_league_table
 from .configuration import Configuration
-from .db import Player, Exercise, Game, Task, ReactionStatus, Game1PlayerResult, Rank
+from .db import Player, Exercise, Game, Task, ReactionStatus, Game1PlayerResult, Rank, GameStatus
 from .db import (
     get_random_tasks,
     process_player,
@@ -723,7 +723,7 @@ async def finish_game_1(
         rank = 1
         points = 6
         last_score = 0
-        response_message = f"Placings from the game (ID: {game.id}):\n"
+        response_message = f"Player rankings in game (ID: {game.id}):\n"
         for player in sorted_scores:
             if player[1][1] < last_score:
                 rank += 1
@@ -744,10 +744,16 @@ async def finish_game_1(
                 + f"Survived: {player[1][2]} / {game.playing_days} days"
                 + "\n"
             )
+        response_message += (
+            "The league table has been recalculated with the new rankings. "
+            + "Thank you all for participating. We hope you enjoyed it and "
+            + "will join us again next season."
+        )
         await update_db_objs(config, ranks)
+        game.status = GameStatus.FINISHED
+        _ = await update_db_obj(config, game)
+        await generate_league_table(config)
         await interaction.followup.send(response_message)
-        # Game in status ausgewertet
-        # Leage neu berechnen
 
     except Exception as err:
         config.watcher.logger.error(

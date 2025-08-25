@@ -116,7 +116,7 @@ class GameSelect(discord.ui.Select):
     the input is built dynamically with the possible games that can be changed.
     """
 
-    def __init__(self, config, games):
+    def __init__(self, config: Configuration, games: list[Game]):
         self.config = config
         options = [
             discord.SelectOption(
@@ -618,7 +618,7 @@ class ModalButtonView(discord.ui.View):
 
 async def finish_game_1(
     config: Configuration, game: Game, interaction: discord.Interaction
-):
+): # pylint: disable=too-many-locals, too-many-statements
     """
     Function to finish the game and update the game status.
 

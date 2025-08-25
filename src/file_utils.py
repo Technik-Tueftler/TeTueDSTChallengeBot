@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime
 import discord
 import pandas as pd
+from pandas.errors import EmptyDataError, ParserError
 from sqlalchemy.future import select
 from .configuration import Configuration
 from .db import Task
@@ -120,10 +121,13 @@ async def import_tasks(interaction: discord.Interaction, config: Configuration):
                 f"{", ".join(str(x+2) for x in updated_rows)}."
             )
         await interaction.response.send_message(message, ephemeral=True)
-    except (KeyError, TypeError) as err:
+
+    except (FileNotFoundError, PermissionError, OSError) as err:
+        config.watcher.logger.error(f"Error accessing the file: {err}")
+    except (EmptyDataError, ParserError) as err:
+        config.watcher.logger.error(f"Error reading the Excel file: {err}")
+    except (KeyError, TypeError, ValueError) as err:
         config.watcher.logger.error(f"Validation error: {err}")
-    except Exception as err:
-        config.watcher.logger.error(f"Error during import: {err}")
 
 
 async def export_tasks(interaction: discord.Interaction, config: Configuration):

@@ -3,7 +3,14 @@ File contains all the functions required to adjust the status of a game.
 The workflow is started via a command.
 """
 
+import asyncio
 import discord
+from discord.errors import (
+    DiscordException,
+    HTTPException,
+    Forbidden,
+    NotFound,
+)
 from .configuration import Configuration
 from .db import get_games_w_status, get_game_from_id, update_db_obj
 from .db import GameStatus, Game
@@ -179,6 +186,7 @@ class GenGameSelect(discord.ui.Select):
     General GameSelect class to create a input menu to select the target game. Here
     the input is built dynamically with the possible games that can be changed.
     """
+
     def __init__(self, config: Configuration, games: list[Game]):
         self.config = config
         options = [
@@ -212,6 +220,7 @@ class GenGameSelectView(discord.ui.View):
     GenGameSelectView class to create a view for the user to select the
     target game to change the status.
     """
+
     def __init__(self, config, games):
         super().__init__()
         self.selected_game_id = None
@@ -306,5 +315,12 @@ async def evaluate_game(interaction: discord.Interaction, config: Configuration)
                 config.watcher.logger.error(
                     f"Game with ID {game.id} has an unknown name: {game.name}."
                 )
-    except Exception as err:
-        print(f"Error during evaluate_game: {err}")
+    except (
+        asyncio.TimeoutError,
+        asyncio.CancelledError,
+        DiscordException,
+        HTTPException,
+        Forbidden,
+        NotFound,
+    ) as err:
+        config.watcher.logger.error(f"Error during evaluate_game: {err}")

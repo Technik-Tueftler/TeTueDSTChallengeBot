@@ -891,16 +891,42 @@ async def get_game1_player_results_from_id(
         )
 
 
-async def determine_ranks_game_1(config: Configuration, game_id: int) -> list[Game1PlayerResult]:
-    async with config.db.session() as session:
-        query = (
-            select(Game1PlayerResult)
-            .join(GamePlayerAssociation, Game1PlayerResult.game_player_association_id == GamePlayerAssociation.id)
-            .join(Player, GamePlayerAssociation.player_id == Player.id)
-            .where(GamePlayerAssociation.game_id == game_id)
-            .options(selectinload(Game1PlayerResult.gameplayerassociation).selectinload(GamePlayerAssociation.player))
-        )
-        return (await session.execute(query)).scalars().all()
+async def determine_ranks_game_1(config: Configuration, game_ids: list[int]) -> list[Game1PlayerResult]:
+    try:
+        config.watcher.logger.debug(f"Determine ranks for game IDs: {game_ids}")
+        async with config.db.session() as session:          
+            statement = (
+                select(Game1PlayerResult)
+                .join(Game1PlayerResult.gameplayerassociation)
+                .join(GamePlayerAssociation.player)
+                .join(GamePlayerAssociation.game)
+                .where(GamePlayerAssociation.game_id.in_(game_ids))
+                .order_by(
+                    desc(Game1PlayerResult.completed_tasks),
+                    desc(case((Game1PlayerResult.survived == "yes", 1), else_=0)),
+                    desc(Game1PlayerResult.player_days)
+                )
+                .options(
+                    selectinload(Game1PlayerResult.gameplayerassociation)
+                    .selectinload(GamePlayerAssociation.player),
+                    selectinload(Game1PlayerResult.gameplayerassociation)
+                    .selectinload(GamePlayerAssociation.game)
+                )
+            )
+            results = (await session.execute(statement)).scalars().all()
+
+            for result in results:
+                player = result.gameplayerassociation.player
+                game = result.gameplayerassociation.game
+                config.watcher.logger.debug(
+                    f"Player: {player.name}, Game: {game.id}, "
+                    + f"Completed Tasks: {result.completed_tasks}, Survived: {result.survived}, "
+                    + f"Player Days: {result.player_days}"
+                )
+
+    except Exception as err:
+        config.watcher.logger.error(f"Error determining ranks: {str(err)}", exc_info=True)
+        return []
 
 async def sync_db(engine: AsyncEngine):
     """

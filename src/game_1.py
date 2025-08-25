@@ -692,19 +692,7 @@ async def finish_game_1(
             ephemeral=True,
         )
         await view.wait()
-        game_player_associations = await get_game_player_associations_from_id(
-            config, Game, [game.id]
-        )
-        if not game_player_associations:
-            config.watcher.logger.error(
-                f"No game player associations found for game ID: {game.id}"
-            )
-            return
-        game1_player_results = await get_game1_player_results_from_id(config, game_player_associations)
-        temp = await determine_ranks_game_1(config, game.id)
-        for t in temp:
-            player = t.gameplayerassociation.player
-            print(f"Spieler: {player.name}, Result: {t.completed_tasks}")
+        _ = await determine_ranks_game_1(config, [game.id])
 
     except Exception as err:
         config.watcher.logger.error(

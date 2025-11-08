@@ -1,9 +1,11 @@
+ # pylint: disable=broad-exception-caught
 """
 Here are all the functions needed to import and synchronize important game
 information from the game master.
 """
 import os
 from pathlib import Path
+import traceback
 from datetime import datetime
 import discord
 import pandas as pd
@@ -128,7 +130,10 @@ async def import_tasks(interaction: discord.Interaction, config: Configuration):
         config.watcher.logger.error(f"Error reading the Excel file: {err}")
     except (KeyError, TypeError, ValueError) as err:
         config.watcher.logger.error(f"Validation error: {err}")
-
+    except Exception as err:
+        config.watcher.logger.error(
+                f"Error during callback: {traceback.print_exception(err)}"
+            )
 
 async def export_tasks(interaction: discord.Interaction, config: Configuration):
     """
@@ -140,8 +145,6 @@ async def export_tasks(interaction: discord.Interaction, config: Configuration):
     """
     try:
         config.watcher.logger.debug("Exporting tasks from file")
-        config.watcher.logger.debug(f"File path: {config.game.export_task_path}")
-        config.watcher.logger.debug(f"Working directory: {os.getcwd()}")
         async with config.db.session() as session:
             async with session.begin():
                 tasks = (await session.execute(select(Task))).scalars().all()
@@ -159,11 +162,24 @@ async def export_tasks(interaction: discord.Interaction, config: Configuration):
             for task in tasks
         ]
         df = pd.DataFrame(data)
+        if df.empty:
+            config.watcher.logger.warning("No data available in Database but requested.")
+            await interaction.response.send_message(
+                "No data availbale in Database.", ephemeral=True
+            )
+            return
+        config.watcher.logger.trace("Data available in Database.")
         date = datetime.now().strftime("%Y_%m_%d")
-        path_file = Path("files") / f"{date}_tasks.xlsx"
+        path_file = Path(os.getcwd()) / Path("files") / f"{date}_tasks.xlsx"
+        config.watcher.logger.debug(f"Export-Path: {path_file}")
         df.to_excel(path_file, index=False)
+        config.watcher.logger.trace("Data saved to excel.")
         await interaction.response.send_message(
             f"Export is generated and saved: {path_file}.", ephemeral=True
         )
     except discord.errors.Forbidden as err:
         config.watcher.logger.error(f"Error during callback with DC permissons: {err}")
+    except Exception as err:
+        config.watcher.logger.error(
+                f"Error during callback: {traceback.print_exception(err)}"
+            )
